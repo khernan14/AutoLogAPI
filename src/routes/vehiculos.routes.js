@@ -12,7 +12,7 @@ import { authenticate, authorize } from "../middleware/auth.middleware.js";
 const router = express.Router();
 
 // Routes
-router.get("/", authenticate, getVehiculos);
+router.get("/", getVehiculos);
 router.get("/ubicaciones", authenticate, getUbicaciones);
 router.get("/:id", listarVehiculosEmpleado);
 router.post("/", authenticate, authorize("Admin", "Supervisor"), addVehiculo);
