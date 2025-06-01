@@ -1,3 +1,5 @@
+import mysql from "mysql2";
+
 const pool = mysql.createPool({
   host: process.env.DB_HOST || "nozomi.proxy.rlwy.net",
   user: process.env.DB_USER || "root",
