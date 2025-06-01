@@ -1,5 +1,3 @@
-import mysql from "mysql2/promise";
-
 const pool = mysql.createPool({
   host: process.env.DB_HOST || "nozomi.proxy.rlwy.net",
   user: process.env.DB_USER || "root",
@@ -12,5 +10,14 @@ const pool = mysql.createPool({
     rejectUnauthorized: true,
   },
 });
+
+pool
+  .getConnection()
+  .then(() => {
+    console.log("✅ Conexión exitosa a la base de datos MySQL");
+  })
+  .catch((err) => {
+    console.error("❌ Error al conectar a la base de datos:", err.message);
+  });
 
 export default pool;
