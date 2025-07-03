@@ -46,14 +46,14 @@ router.get(
 router.post(
   "/salida",
   authenticate,
-  authorizeByPermisos("crear_registros"),
+  authorizeByPermisos("registrar_uso"),
   validarRegistroSalida,
   registrarSalida
 );
 router.post(
   "/regreso",
   authenticate,
-  authorizeByPermisos("crear_registros"),
+  authorizeByPermisos("registrar_uso"),
   validarRegistroRegreso,
   registrarRegreso
 );
