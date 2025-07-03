@@ -62,6 +62,31 @@ export const getReservaById = async (req, res) => {
   }
 };
 
+// obtener reservas activas por empleado
+export const getReservasEmpleado = async (req, res) => {
+  const { id_empleado } = req.params;
+
+  try {
+    const [resultado] = await pool.query(
+      `SELECT COUNT(*) AS total FROM reservas WHERE id_empleado = ? AND estatus = 'Activa'`,
+      [id_empleado]
+    );
+
+    if (resultado.length === 0) {
+      return res
+        .status(404)
+        .json({ message: "No hay reservas pendientes para este empleado." });
+    }
+
+    res.json(resultado); // Aquí devolvemos todas las reservas activas
+  } catch (error) {
+    console.error("❌ Error al obtener registro pendiente:", error);
+    res
+      .status(500)
+      .json({ error: "Error interno del servidor.", details: error.message });
+  }
+};
+
 // Actualizar una reserva
 export const updateReserva = async (req, res) => {
   const { id } = req.params;

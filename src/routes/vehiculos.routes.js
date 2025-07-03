@@ -6,17 +6,47 @@ import {
   deleteVehiculo,
   listarVehiculosEmpleado,
   getUbicaciones,
+  restoreVehiculo,
 } from "../controllers/vehiculos.controller.js";
-import { authenticate, authorize } from "../middleware/auth.middleware.js";
+import {
+  authenticate,
+  authorizeByPermisos,
+} from "../middleware/auth.middleware.js";
 
 const router = express.Router();
 
 // Routes
-router.get("/", authenticate, getVehiculos);
-router.get("/ubicaciones", authenticate, getUbicaciones);
-router.get("/:id", listarVehiculosEmpleado);
-router.post("/", authenticate, authorize("Admin", "Supervisor"), addVehiculo);
-router.put("/:id", authenticate, updateVehiculo);
-router.delete("/:id", authenticate, authorize("Admin"), deleteVehiculo);
+router.get(
+  "/",
+  authenticate,
+  authorizeByPermisos("ver_vehiculos"),
+  getVehiculos
+);
+router.get(
+  "/ubicaciones",
+  authenticate,
+  authorizeByPermisos("ver_ubicaciones"),
+  getUbicaciones
+);
+router.get("/:id", authenticate, listarVehiculosEmpleado);
+router.post(
+  "/",
+  authenticate,
+  authorizeByPermisos("crear_vehiculos"),
+  addVehiculo
+);
+router.put(
+  "/:id",
+  authenticate,
+  authorizeByPermisos("editar_vehiculos"),
+  updateVehiculo
+);
+router.delete(
+  "/:id",
+  authenticate,
+  authorizeByPermisos("eliminar_vehiculos"),
+  deleteVehiculo
+);
+router.put("/restaurar/:id", authenticate, restoreVehiculo);
 
 export default router;

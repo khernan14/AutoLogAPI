@@ -20,10 +20,19 @@ import {
   obtenerRegistrosPorEmpleado,
   obtenerVehiculosDisponibles,
 } from "../controllers/reportes.controller.js";
+import {
+  authenticate,
+  authorizeByPermisos,
+} from "../middleware/auth.middleware.js";
 
 const router = express.Router();
 
-router.get("/ciudades", getCiudades);
+router.get(
+  "/ciudades",
+  authenticate,
+  authorizeByPermisos("ver_ciudades"),
+  getCiudades
+);
 
 router.get(
   "/empleados/:id_empleado/registro-pendiente",
@@ -34,8 +43,20 @@ router.get(
   "/obtener-combustible-actual/:id_vehiculo",
   obtenerCombustibleActual
 );
-router.post("/salida", validarRegistroSalida, registrarSalida);
-router.post("/regreso", validarRegistroRegreso, registrarRegreso);
+router.post(
+  "/salida",
+  authenticate,
+  authorizeByPermisos("crear_registros"),
+  validarRegistroSalida,
+  registrarSalida
+);
+router.post(
+  "/regreso",
+  authenticate,
+  authorizeByPermisos("crear_registros"),
+  validarRegistroRegreso,
+  registrarRegreso
+);
 router.post("/:id/upload", upload.array("imagenes", 10), asociarImagenes);
 router.get("/:id", obtenerRegistroConImagenes);
 

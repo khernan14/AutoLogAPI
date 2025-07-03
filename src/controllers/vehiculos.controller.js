@@ -108,7 +108,27 @@ export const deleteVehiculo = async (req, res) => {
       null,
       null,
     ]);
-    res.json({ message: "Vehículo eliminado correctamente" });
+    res.json({ message: "Vehículo actualizado correctamente" });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const restoreVehiculo = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    await llamarSPVehiculos("Restaurar", [
+      null,
+      "Restaurar",
+      id,
+      null,
+      null,
+      null,
+      null,
+      null,
+    ]);
+    res.json({ message: "Vehículo actualizado correctamente" });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

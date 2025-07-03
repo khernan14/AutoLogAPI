@@ -13,6 +13,19 @@ export const getEmployees = async (req, res) => {
   }
 };
 
+export const getEmployeesBoss = async (req, res) => {
+  try {
+    // Llamar al procedimiento almacenado para obtener todos los empleados
+    const [rows] = await pool.query(
+      "CALL gestion_empleados('ObtenerJefes', NULL, NULL, NULL, NULL, NULL)",
+      [req.user.id]
+    );
+    res.json(rows[0]);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
 // Obtener un empleado por su ID
 export const getEmployeeById = async (req, res) => {
   const { id } = req.params;

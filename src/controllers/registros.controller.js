@@ -200,6 +200,7 @@ export const registrarRegreso = async (req, res) => {
 };
 
 // 📸 Asociar imágenes a un registro
+// 📸 Asociar imágenes a un registro
 export const asociarImagenes = async (req, res) => {
   const id_registro = req.params.id;
   const archivos = req.files;
@@ -223,7 +224,10 @@ export const asociarImagenes = async (req, res) => {
   try {
     for (const file of archivos) {
       console.log("📂 Guardando archivo:", file.filename);
-      const url = "/uploads/registros/" + file.filename;
+
+      // ✅ Usar HOST dinámico desde variables de entorno
+      const baseUrl = process.env.HOST || "http://localhost:3000";
+      const url = `${baseUrl}/uploads/registros/${file.filename}`;
 
       // ✅ Insertar imagen en `images`
       const [imageResult] = await pool.query(

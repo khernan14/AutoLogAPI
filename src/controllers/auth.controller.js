@@ -6,7 +6,7 @@ import pool from "../config/connectionToSql.js";
 export const getUsers = async (req, res) => {
   try {
     const [rows] = await pool.query(
-      "CALL gestion_usuarios('ListarUsuariosActivos', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)"
+      "CALL gestion_usuarios('ListarUsuariosActivos', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)"
     );
     res.json(rows[0]);
   } catch (error) {
@@ -18,7 +18,7 @@ export const getUsersById = async (req, res) => {
   try {
     const { id } = req.params;
     const [rows] = await pool.query(
-      "CALL gestion_usuarios('Perfil', ?, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)",
+      "CALL gestion_usuarios('Perfil', ?, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)",
       [id]
     );
     res.json(rows[0]);
@@ -29,14 +29,22 @@ export const getUsersById = async (req, res) => {
 
 // Registro de un nuevo usuario
 export const register = async (req, res) => {
-  const { nombre, email, username, password, rol, puesto, id_ciudad } =
-    req.body;
+  const {
+    nombre,
+    email,
+    username,
+    password,
+    rol,
+    puesto,
+    id_ciudad,
+    supervisor_id,
+  } = req.body;
 
   try {
     const hashedPassword = await bcrypt.hash(password, 10);
 
     await pool.query(
-      "CALL gestion_usuarios('Registrar', NULL, ?, ?, ?, ?, ?, ?, ?, ?)",
+      "CALL gestion_usuarios('Registrar', NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       [
         nombre,
         email,
@@ -46,6 +54,7 @@ export const register = async (req, res) => {
         "Activo",
         puesto,
         id_ciudad,
+        supervisor_id,
       ]
     );
 
@@ -61,7 +70,7 @@ export const login = async (req, res) => {
 
   try {
     const [rows] = await pool.query(
-      "CALL gestion_usuarios('Login', NULL, NULL, NULL, ?, NULL, NULL, NULL, NULL, NULL)",
+      "CALL gestion_usuarios('Login', NULL, NULL, NULL, ?, NULL, NULL, NULL, NULL, NULL, NULL)",
       [username]
     );
 
@@ -96,14 +105,23 @@ export const login = async (req, res) => {
 // Actualizar un usuario
 export const updateUser = async (req, res) => {
   const { id } = req.params;
-  const { nombre, email, username, password, rol, puesto, estatus, id_ciudad } =
-    req.body;
+  const {
+    nombre,
+    email,
+    username,
+    password,
+    rol,
+    puesto,
+    estatus,
+    id_ciudad,
+    supervisor_id,
+  } = req.body;
 
   try {
     const hashedPassword = password ? await bcrypt.hash(password, 10) : null;
 
     await pool.query(
-      "CALL gestion_usuarios('Actualizar', ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      "CALL gestion_usuarios('Actualizar', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       [
         id,
         nombre,
@@ -114,6 +132,7 @@ export const updateUser = async (req, res) => {
         estatus,
         puesto,
         id_ciudad,
+        supervisor_id, // <-- Nuevo
       ]
     );
 
@@ -132,7 +151,7 @@ export const updateOwnProfile = async (req, res) => {
     const hashedPassword = password ? await bcrypt.hash(password, 10) : null;
 
     await pool.query(
-      "CALL gestion_usuarios('Actualizar', ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL)",
+      "CALL gestion_usuarios('Actualizar', ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL)",
       [userId, nombre, email, username, hashedPassword || null]
     );
 
@@ -148,11 +167,26 @@ export const deleteUser = async (req, res) => {
 
   try {
     await pool.query(
-      "CALL gestion_usuarios('Eliminar', ?, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)",
+      "CALL gestion_usuarios('Eliminar', ?, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)",
       [id]
     );
 
     res.json({ message: "Usuario eliminado correctamente" });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const restoreUser = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    await pool.query(
+      "CALL gestion_usuarios('Restaurar', ?, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)",
+      [id]
+    );
+
+    res.json({ message: "Usuario restaurado correctamente" });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

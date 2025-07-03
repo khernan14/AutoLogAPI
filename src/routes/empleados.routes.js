@@ -1,13 +1,20 @@
-import express from 'express';
-import { getEmployees, AddEmployees, updateEmployee, deleteEmployee } from '../controllers/empleados.controller.js';
-import { authenticate, authorize } from '../middleware/auth.middleware.js';
+import express from "express";
+import {
+  getEmployees,
+  AddEmployees,
+  updateEmployee,
+  deleteEmployee,
+  getEmployeesBoss,
+} from "../controllers/empleados.controller.js";
+import { authenticate } from "../middleware/auth.middleware.js";
 
 const router = express.Router();
 
 // Rutas
-router.get('/', authenticate, authorize('Admin', 'Supervisor'), getEmployees);
-router.post('/', authenticate, authorize('Admin'), AddEmployees);
-router.put('/:id', authenticate, authorize('Admin'), updateEmployee);
-router.delete('/:id', authenticate, authorize('Admin'), deleteEmployee);
+router.get("/", authenticate, getEmployees);
+router.get("/supervisor", authenticate, getEmployeesBoss);
+router.post("/", authenticate, AddEmployees);
+router.put("/:id", authenticate, updateEmployee);
+router.delete("/:id", authenticate, deleteEmployee);
 
 export default router;

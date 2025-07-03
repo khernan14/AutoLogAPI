@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="es" style="margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif;">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Bienvenido a AutoLog</title>
+  </head>
+  <body style="background-color: #f5f7fa; padding: 0; margin: 0;">
+    <table
+      width="100%"
+      cellpadding="0"
+      cellspacing="0"
+      style="max-width: 600px; margin: 0 auto; background: white; border-radius: 10px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.05);"
+    >
+      <tr style="background-color: #1a73e8;">
+        <td style="padding: 20px; text-align: center;">
+          <img
+            src="https://imgur.com/gallery/logo-tecnasa-L7IhhNU#a09hkJj"
+            alt="AutoLog"
+            width="150"
+            style="margin-bottom: 10px;"
+          />
+          <h2 style="color: white; margin: 0;">Bienvenido a AutoLog</h2>
+        </td>
+      </tr>
+
+      <tr>
+        <td style="padding: 30px;">
+          <p style="font-size: 18px; color: #333;">Hola {{nombre}},</p>
+          <p style="font-size: 16px; color: #555;">
+            ¡Nos alegra tenerte en el sistema de gestión de vehículos de la empresa!
+          </p>
+          <p style="font-size: 16px; color: #555;">
+            Aquí están tus credenciales para acceder:
+          </p>
+
+          <div style="background-color: #f1f3f4; padding: 15px; border-radius: 8px; margin: 20px 0;">
+            <p><strong>Usuario:</strong> {{usuario}}</p>
+            <p><strong>Contraseña temporal:</strong> {{password}}</p>
+          </div>
+
+          <p style="font-size: 16px; color: #d93025; font-weight: bold;">
+            Por favor, cambia tu contraseña al ingresar por primera vez.
+          </p>
+
+          <a
+            href="https://www.herndevs.com/auth/login"
+            style="display: inline-block; background-color: #1a73e8; color: white; padding: 12px 20px; border-radius: 5px; text-decoration: none; font-weight: bold; margin-top: 20px;"
+            >Ingresar al sistema</a
+          >
+
+          <p style="margin-top: 40px; font-size: 14px; color: #999;">
+            Si no solicitaste este acceso, puedes ignorar este correo.
+          </p>
+        </td>
+      </tr>
+
+      <tr>
+        <td
+          style="background-color: #f1f3f4; padding: 20px; text-align: center; font-size: 12px; color: #777;"
+        >
+          &copy; 2025 AutoLog | HernDev Systems
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
