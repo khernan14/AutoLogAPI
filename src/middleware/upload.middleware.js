@@ -8,9 +8,9 @@ const __dirname = dirname(__filename);
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, "/app/uploads/registros");
+    const uploadPath = path.join(__dirname, "../uploads/registros");
+    cb(null, uploadPath);
   },
-
   filename: (req, file, cb) => {
     const unique = Date.now() + "-" + Math.round(Math.random() * 1e9);
     cb(null, unique + path.extname(file.originalname));
