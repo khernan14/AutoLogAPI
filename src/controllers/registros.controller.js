@@ -226,7 +226,8 @@ export const asociarImagenes = async (req, res) => {
       console.log("📂 Guardando archivo:", file.filename);
 
       // ✅ Usar HOST dinámico desde variables de entorno
-      const baseUrl = process.env.HOST || "http://localhost:3000";
+      const baseUrl =
+        process.env.HOST?.replace(/\/$/, "") || "http://localhost:3000";
       const url = `${baseUrl}/uploads/registros/${file.filename}`;
 
       // ✅ Insertar imagen en `images`
