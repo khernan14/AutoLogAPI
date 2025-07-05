@@ -22,29 +22,24 @@ router.get(
   authorizeByPermisos("ver_vehiculos"),
   getVehiculos
 );
-router.get(
-  "/ubicaciones",
-  authenticate,
-  authorizeByPermisos("ver_ubicaciones"),
-  getUbicaciones
-);
+router.get("/ubicaciones", authenticate, getUbicaciones);
 router.get("/:id", authenticate, listarVehiculosEmpleado);
 router.post(
   "/",
   authenticate,
-  authorizeByPermisos("crear_vehiculos"),
+  authorizeByPermisos("crear_vehiculo"),
   addVehiculo
 );
 router.put(
   "/:id",
   authenticate,
-  authorizeByPermisos("editar_vehiculos"),
+  authorizeByPermisos("editar_vehiculo"),
   updateVehiculo
 );
 router.delete(
   "/:id",
   authenticate,
-  authorizeByPermisos("eliminar_vehiculos"),
+  authorizeByPermisos("eliminar_vehiculo"),
   deleteVehiculo
 );
 router.put("/restaurar/:id", authenticate, restoreVehiculo);

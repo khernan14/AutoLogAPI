@@ -75,12 +75,24 @@ export const login = async (req, res) => {
     );
 
     const user = rows[0][0];
-
     if (!user) return res.status(400).json({ error: "Usuario no encontrado" });
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch)
       return res.status(400).json({ error: "Contraseña incorrecta" });
+
+    // ⬇️ Obtener permisos del usuario
+    const [permisosRows] = await pool.query(
+      `
+      SELECT p.nombre
+      FROM usuario_permisos up
+      INNER JOIN permisos p ON up.permiso_id = p.id
+      WHERE up.id_usuario = ?
+      `,
+      [user.id_usuario]
+    );
+
+    const permisos = permisosRows.map((p) => p.nombre); // ["ver_reportes", "editar_usuario", ...]
 
     const token = jwt.sign(
       { id: user.id_usuario, rol: user.rol },
@@ -96,6 +108,7 @@ export const login = async (req, res) => {
       id: user.id_usuario,
       id_empleado: user.id,
       email: user.email,
+      permisos, // ⬅️ devolvemos los permisos
     });
   } catch (error) {
     res.status(500).json({ error: error.message });

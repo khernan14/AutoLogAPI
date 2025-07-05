@@ -71,25 +71,25 @@ router.get(
 router.get(
   "/reportes/total-empleados",
   authenticate,
-  authorizeByPermisos("ver_reportes"), // O un permiso más específico si lo tienes
+  authorizeByPermisos("gestionar_home"), // O un permiso más específico si lo tienes
   getTotalEmpleados
 );
 router.get(
   "/reportes/total-vehiculos",
   authenticate,
-  authorizeByPermisos("ver_reportes"),
+  authorizeByPermisos("gestionar_home"),
   getTotalVehiculos
 );
 router.get(
   "/reportes/vehiculos-en-uso",
   authenticate,
-  authorizeByPermisos("ver_reportes"),
+  authorizeByPermisos("gestionar_home"),
   getVehiculosEnUso
 );
 router.get(
   "/reportes/vehiculos-en-mantenimiento",
   authenticate,
-  authorizeByPermisos("ver_reportes"),
+  authorizeByPermisos("gestionar_home"),
   getVehiculosEnMantenimiento
 );
 
