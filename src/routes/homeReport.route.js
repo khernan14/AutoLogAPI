@@ -6,6 +6,7 @@ import {
   getReporteVehiculosMasUtilizados,
   getReporteRegistrosPorUbicacion,
   getReporteConsumoCombustibleVehiculo,
+  // Nuevas importaciones para las métricas del Home
   getTotalEmpleados,
   getTotalVehiculos,
   getVehiculosEnUso,
@@ -26,40 +27,31 @@ router.get(
   getRegistros
 );
 
-// Nuevas rutas para los reportes específicos
-// Reporte: Empleados con más salidas
+// Rutas para los reportes específicos (ya existentes)
 router.get(
   "/reportes/empleados-mas-salidas",
   authenticate,
-  authorizeByPermisos("ver_reportes"), // Asumo que el permiso para ver reportes es el mismo
+  authorizeByPermisos("ver_reportes"),
   getReporteEmpleadosMasSalidas
 );
-
-// Reporte: Kilometraje total recorrido por empleado
 router.get(
   "/reportes/kilometraje-por-empleado",
   authenticate,
   authorizeByPermisos("ver_reportes"),
   getReporteKilometrajePorEmpleado
 );
-
-// Reporte: Vehículos más utilizados
 router.get(
   "/reportes/vehiculos-mas-utilizados",
   authenticate,
   authorizeByPermisos("ver_reportes"),
   getReporteVehiculosMasUtilizados
 );
-
-// Reporte: Registros por ubicación
 router.get(
   "/reportes/registros-por-ubicacion",
   authenticate,
   authorizeByPermisos("ver_reportes"),
   getReporteRegistrosPorUbicacion
 );
-
-// Reporte: Consumo promedio de combustible por vehículo
 router.get(
   "/reportes/consumo-combustible-vehiculo",
   authenticate,
@@ -67,30 +59,6 @@ router.get(
   getReporteConsumoCombustibleVehiculo
 );
 
-// Nuevas rutas para las métricas del Home
-router.get(
-  "/reportes/total-empleados",
-  authenticate,
-  authorizeByPermisos("ver_reportes"), // O un permiso más específico si lo tienes
-  getTotalEmpleados
-);
-router.get(
-  "/reportes/total-vehiculos",
-  authenticate,
-  authorizeByPermisos("ver_reportes"),
-  getTotalVehiculos
-);
-router.get(
-  "/reportes/vehiculos-en-uso",
-  authenticate,
-  authorizeByPermisos("ver_reportes"),
-  getVehiculosEnUso
-);
-router.get(
-  "/reportes/vehiculos-en-mantenimiento",
-  authenticate,
-  authorizeByPermisos("ver_reportes"),
-  getVehiculosEnMantenimiento
-);
+// --- Nuevas Rutas para las Métricas del Dashboard Home ---
 
 export default router;
