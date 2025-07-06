@@ -9,6 +9,7 @@ import {
   getUsersById,
   restoreUser,
   resetPassword,
+  getEmailSupervisor,
 } from "../controllers/auth.controller.js";
 import {
   authenticate,
@@ -68,5 +69,7 @@ router.put(
 );
 
 router.post("/reset-password", resetPassword);
+
+router.get("/email-supervisor", getEmailSupervisor);
 
 export default router;

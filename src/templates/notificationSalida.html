@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="es" style="margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif;">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Notificación de Salida de Vehículo</title>
+  </head>
+  <body style="background-color: #f5f7fa; padding: 0; margin: 0;">
+    <table
+      width="100%"
+      cellpadding="0"
+      cellspacing="0"
+      style="max-width: 600px; margin: 0 auto; background: white; border-radius: 10px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.05);"
+    >
+      <!-- Header -->
+      <tr style="background-color: #1a73e8;">
+        <td style="padding: 20px; text-align: center;">
+          <img
+            src="https://i.imgur.com/a09hkJj.png"
+            alt="AutoLog"
+            width="150"
+            style="margin-bottom: 10px;"
+          />
+          <h2 style="color: white; margin: 0;">Salida de Vehículo Registrada</h2>
+        </td>
+      </tr>
+
+      <!-- Cuerpo del mensaje -->
+      <tr>
+        <td style="padding: 30px;">
+          <p style="font-size: 18px; color: #333;">
+            Buen día {{employeeName}},
+          </p>
+
+          <p style="font-size: 16px; color: #555; line-height: 1.6;">
+            Se ha registrado correctamente la salida del vehículo 
+            <strong>{{vehicleName}}</strong> el día <strong>{{fecha}}</strong> a las <strong>{{hora}}</strong>.
+          </p>
+
+          <p style="font-size: 16px; color: #555; line-height: 1.6;">
+            Por favor, recuerda registrar el retorno del vehículo una vez finalices la atención correspondiente.
+          </p>
+
+          <p style="font-size: 16px; color: #1a73e8; font-weight: bold; margin-top: 30px;">
+            ¡Que tengas un buen viaje!
+          </p>
+
+          <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
+
+          <p style="font-size: 16px; color: #333;">
+            Estimado/a <strong>{{supervisorName}}</strong>,
+          </p>
+          <p style="font-size: 16px; color: #555; line-height: 1.6;">
+            Le solicitamos estar pendiente para que el registro de regreso del vehículo sea realizado de manera oportuna al concluir la salida.
+          </p>
+
+          <p style="margin-top: 40px; font-size: 14px; color: #999;">
+            Este correo ha sido generado automáticamente por el sistema de gestión de vehículos AutoLog.
+          </p>
+        </td>
+      </tr>
+
+      <!-- Footer -->
+      <tr>
+        <td style="background-color: #f1f3f4; padding: 20px; text-align: center; font-size: 12px; color: #777;">
+          &copy; 2025 AutoLog | HernDev Systems
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

@@ -27,6 +27,40 @@ export const getUsersById = async (req, res) => {
   }
 };
 
+export const getEmailSupervisor = async (req, res) => {
+  const { id_empleado } = req.query; // O usa req.body si es POST
+
+  if (!id_empleado) {
+    return res.status(400).json({ error: "Falta id_empleado" });
+  }
+
+  try {
+    const [rows] = await pool.query(
+      `SELECT 
+        e.id AS empleado_id,
+        ue.nombre AS empleado_nombre,
+        ue.email AS empleado_email,
+        e.supervisor_id,
+        us.nombre AS supervisor_nombre,
+        us.email AS supervisor_email
+      FROM empleados e
+      LEFT JOIN usuarios ue ON e.id_usuario = ue.id_usuario
+      LEFT JOIN empleados s ON e.supervisor_id = s.id
+      LEFT JOIN usuarios us ON s.id_usuario = us.id_usuario
+      WHERE e.id = ?`,
+      [id_empleado]
+    );
+
+    if (!rows.length)
+      return res.status(404).json({ error: "Empleado no encontrado" });
+
+    res.json(rows[0]);
+  } catch (error) {
+    console.error("Error al obtener supervisor:", error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
 // Registro de un nuevo usuario
 export const register = async (req, res) => {
   const {

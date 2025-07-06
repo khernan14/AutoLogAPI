@@ -32,3 +32,23 @@ export const recoveryTransporter = nodemailer.createTransport({
     pass: process.env.RECOVERY_PASS,
   },
 });
+
+export const sendNotificationSalidaTransporter = nodemailer.createTransport({
+  host: process.env.MAIL_HOST,
+  port: parseInt(process.env.MAIL_PORT),
+  secure: true,
+  auth: {
+    user: process.env.NO_REPLY_USER,
+    pass: process.env.NO_REPLY_PASS,
+  },
+});
+
+export const sendNotificationRegresoTransporter = nodemailer.createTransport({
+  host: process.env.MAIL_HOST,
+  port: parseInt(process.env.MAIL_PORT),
+  secure: true,
+  auth: {
+    user: process.env.NO_REPLY_USER,
+    pass: process.env.NO_REPLY_PASS,
+  },
+});

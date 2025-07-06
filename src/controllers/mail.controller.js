@@ -173,3 +173,104 @@ export const sendResetPasswordEmail = async (req, res) => {
     });
   }
 };
+
+export const sendNotificationSalida = async (req, res) => {
+  try {
+    const { to, employeeName, vehicleName, supervisorName } = req.body;
+    const now = new Date();
+    const fecha = now.toLocaleDateString("es-ES", {
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+    });
+    const hora = now.toLocaleTimeString("es-ES", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+    if (!to || !employeeName || !vehicleName || !supervisorName) {
+      return res
+        .status(400)
+        .json({ error: "Faltan campos requeridos: to, nombre o password" });
+    }
+
+    const html = renderHtmlTemplate("notificationSalida.html", {
+      employeeName,
+      vehicleName,
+      supervisorName,
+      fecha,
+      hora,
+    });
+
+    const result = await sendMail({
+      to,
+      subject: "Notificación de salida de vehículo",
+      html,
+      fromType: "noReply",
+    });
+
+    if (result.success) {
+      return res.status(200).json({ message: "Correo enviado correctamente" });
+    } else {
+      return res
+        .status(500)
+        .json({ error: "Error al enviar correo", detail: result.error });
+    }
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error en el servidor" });
+  }
+};
+
+export const sendNotificationRegreso = async (req, res) => {
+  try {
+    const { to, employeeName, vehicleName, supervisorName, estacionamiento } =
+      req.body;
+    const now = new Date();
+    const fecha = now.toLocaleDateString("es-ES", {
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+    });
+    const hora = now.toLocaleTimeString("es-ES", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+    if (
+      (!to || !employeeName || !vehicleName || !supervisorName,
+      !estacionamiento)
+    ) {
+      return res
+        .status(400)
+        .json({ error: "Faltan campos requeridos: to, nombre o password" });
+    }
+
+    const html = renderHtmlTemplate("notificationRegreso.html", {
+      employeeName,
+      vehicleName,
+      supervisorName,
+      estacionamiento,
+      fecha,
+      hora,
+    });
+
+    const result = await sendMail({
+      to,
+      subject: "Notificación de regreso de vehículo",
+      html,
+      fromType: "noReply",
+    });
+
+    if (result.success) {
+      return res.status(200).json({ message: "Correo enviado correctamente" });
+    } else {
+      return res
+        .status(500)
+        .json({ error: "Error al enviar correo", detail: result.error });
+    }
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error en el servidor" });
+  }
+};
