@@ -23,3 +23,12 @@ export const noReplyTransporter = nodemailer.createTransport({
 });
 
 // recovery opcional...
+export const recoveryTransporter = nodemailer.createTransport({
+  host: process.env.MAIL_HOST,
+  port: parseInt(process.env.MAIL_PORT),
+  secure: true,
+  auth: {
+    user: process.env.RECOVERY_USER,
+    pass: process.env.RECOVERY_PASS,
+  },
+});

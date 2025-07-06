@@ -1,5 +1,9 @@
 // services/emailService.js
-import { supportTransporter, noReplyTransporter } from "../config/mailer.js";
+import {
+  supportTransporter,
+  noReplyTransporter,
+  recoveryTransporter,
+} from "../config/mailer.js";
 
 const fromMap = {
   support: {
@@ -11,6 +15,11 @@ const fromMap = {
     name: "HernDev Notificaciones",
     email: process.env.NO_REPLY_USER,
     transporter: noReplyTransporter,
+  },
+  recovery: {
+    name: "HernDev Notificaciones",
+    email: process.env.RECOVERY_USER,
+    transporter: recoveryTransporter,
   },
 };
 

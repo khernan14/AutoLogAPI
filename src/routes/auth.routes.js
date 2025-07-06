@@ -8,6 +8,7 @@ import {
   updateOwnProfile,
   getUsersById,
   restoreUser,
+  resetPassword,
 } from "../controllers/auth.controller.js";
 import {
   authenticate,
@@ -65,5 +66,7 @@ router.put(
   authorize("Admin"),
   restoreUser
 );
+
+router.post("/reset-password", resetPassword);
 
 export default router;

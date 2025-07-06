@@ -39,18 +39,18 @@ app.use(express.urlencoded({ extended: true }));
 
 const uploadsPath = path.join(__dirname, "src", "uploads");
 
-const registrosPath = path.join(__dirname, "src", "uploads", "registros");
+// const registrosPath = path.join(__dirname, "src", "uploads", "registros");
 
-app.get("/api/listar-registros", (req, res) => {
-  fs.readdir(registrosPath, (err, files) => {
-    if (err) {
-      console.error("Error leyendo carpeta registros:", err);
-      return res.status(500).json({ error: "Error leyendo carpeta registros" });
-    }
+// app.get("/api/listar-registros", (req, res) => {
+//   fs.readdir(registrosPath, (err, files) => {
+//     if (err) {
+//       console.error("Error leyendo carpeta registros:", err);
+//       return res.status(500).json({ error: "Error leyendo carpeta registros" });
+//     }
 
-    res.json({ archivos: files });
-  });
-});
+//     res.json({ archivos: files });
+//   });
+// });
 
 // Routes
 app.use("/uploads", express.static(uploadsPath));

@@ -81,6 +81,7 @@ export const obtenerPermisosUsuario = async (req, res) => {
         id: permiso.id,
         nombre: permiso.nombre,
         asignado: permisosAsignadosIds.has(permiso.id),
+        descripcion: permiso.descripcion,
       });
     }
 

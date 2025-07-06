@@ -204,3 +204,43 @@ export const restoreUser = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
+
+export const resetPassword = async (req, res) => {
+  const { token, newPassword } = req.body;
+
+  try {
+    // 1. Buscar el token en la base de datos
+    // Verifica que el token exista, no esté usado y no haya expirado
+    const [tokens] = await pool.query(
+      "SELECT * FROM password_reset_tokens WHERE token = ? AND used = FALSE AND expires_at > NOW()",
+      [token]
+    );
+    const resetTokenEntry = tokens[0];
+
+    if (!resetTokenEntry) {
+      return res.status(400).json({ message: "Token inválido o expirado." });
+    }
+
+    // 2. Hashear la nueva contraseña
+    const hashedPassword = await bcrypt.hash(newPassword, 8); // 10 es el costo del salt, un buen valor estándar
+
+    // 3. Actualizar la contraseña del usuario
+    await pool.query("UPDATE usuarios SET password = ? WHERE id_usuario = ?", [
+      hashedPassword,
+      resetTokenEntry.user_id, // Usar el user_id asociado al token
+    ]);
+
+    // 4. Marcar el token como usado
+    await pool.query(
+      "UPDATE password_reset_tokens SET used = TRUE WHERE id = ?",
+      [resetTokenEntry.id]
+    );
+
+    res.status(200).json({ message: "Contraseña restablecida exitosamente." });
+  } catch (error) {
+    console.error("Error al restablecer la contraseña:", error);
+    res.status(500).json({
+      message: "Error interno del servidor al restablecer la contraseña.",
+    });
+  }
+};
