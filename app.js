@@ -15,6 +15,7 @@ import mailRoutes from "./src/routes/mail.routes.js";
 import gruposRoutes from "./src/routes/grupos.routes.js";
 import grupoUsuariosRoutes from "./src/routes/grupoUsuarios.routes.js";
 import registerReportRoutes from "./src/routes/registerReport.routes.js";
+import helpRoutes from "./src/routes/help.routes.js";
 import path from "path";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
@@ -68,5 +69,6 @@ app.use("/api/mail", mailRoutes);
 app.use("/api/grupos", gruposRoutes);
 app.use("/api/grupo-usuarios", grupoUsuariosRoutes);
 app.use("/api/reports", registerReportRoutes);
+app.use("/api/help", helpRoutes);
 
 export default app;
