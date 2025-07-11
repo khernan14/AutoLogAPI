@@ -55,9 +55,11 @@ router.post(
   "/regreso",
   authenticate,
   authorizeByPermisos("registrar_uso"),
+  upload.array("files", 10), // 👈 antes del validador
   validarRegistroRegreso,
   registrarRegreso
 );
+
 router.post("/:id/upload", upload.array("imagenes", 10), asociarImagenes);
 router.get("/:id", obtenerRegistroConImagenes);
 

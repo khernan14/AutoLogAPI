@@ -226,6 +226,57 @@ export const registrarSalida = async (req, res) => {
 };
 
 // 🚗 Registrar el regreso de un vehículo
+// export const registrarRegreso = async (req, res) => {
+//   const {
+//     id_registro,
+//     id_empleado,
+//     id_ubicacion_regreso,
+//     km_regreso,
+//     combustible_regreso,
+//     comentario_regreso,
+//   } = req.body;
+
+//   try {
+//     const fecha_regreso = new Date();
+
+//     await pool.query(
+//       `CALL GestionarRegistros(
+//         'RegistrarRegreso',
+//         ?,     -- _id
+//         ?,     -- _id_empleado
+//         NULL,  -- _id_vehiculo
+//         NULL,  -- _id_ubicacion_salida
+//         ?,     -- _id_ubicacion_regreso
+//         NULL,  -- _km_salida
+//         ?,     -- _km_regreso
+//         NULL,  -- _combustible_salida
+//         ?,     -- _combustible_regreso
+//         NULL,  -- _comentario_salida
+//         ?,     -- _comentario_regreso
+//         NULL,  -- _fecha_salida
+//         ?,     -- _fecha_regreso
+//         @insertId
+//       );`,
+//       [
+//         id_registro,
+//         id_empleado,
+//         id_ubicacion_regreso,
+//         km_regreso,
+//         combustible_regreso,
+//         comentario_regreso,
+//         fecha_regreso,
+//       ]
+//     );
+
+//     res.json({ message: "Registro de regreso actualizado." });
+//   } catch (error) {
+//     console.error("❌ Error al registrar regreso:", error);
+//     res
+//       .status(500)
+//       .json({ error: "Error al registrar regreso.", details: error.message });
+//   }
+// };
+
 export const registrarRegreso = async (req, res) => {
   const {
     id_registro,
@@ -236,10 +287,19 @@ export const registrarRegreso = async (req, res) => {
     comentario_regreso,
   } = req.body;
 
+  const archivos = req.files;
+
+  if (!archivos || archivos.length === 0) {
+    return res.status(400).json({ error: "Debes subir al menos una imagen." });
+  }
+
+  const conn = await pool.getConnection();
   try {
+    await conn.beginTransaction();
+
     const fecha_regreso = new Date();
 
-    await pool.query(
+    await conn.query(
       `CALL GestionarRegistros(
         'RegistrarRegreso',
         ?,     -- _id
@@ -268,12 +328,39 @@ export const registrarRegreso = async (req, res) => {
       ]
     );
 
-    res.json({ message: "Registro de regreso actualizado." });
+    //'RegistrarRegreso',
+
+    for (const file of archivos) {
+      const baseUrl = process.env.HOST?.replace(/\/$/, "") || "";
+      const url = `${baseUrl}/uploads/registros/${file.filename}`;
+
+      const [imageResult] = await conn.query(
+        "INSERT INTO images (type, url) VALUES (?, ?)",
+        [file.mimetype, url]
+      );
+
+      const id_image = imageResult.insertId;
+
+      await conn.query("CALL GestionarImagenes('Insertar', ?, ?);", [
+        id_registro,
+        id_image,
+      ]);
+    }
+
+    await conn.commit();
+
+    res.status(200).json({
+      message: "Registro de regreso y subida de imágenes exitosos.",
+    });
   } catch (error) {
-    console.error("❌ Error al registrar regreso:", error);
-    res
-      .status(500)
-      .json({ error: "Error al registrar regreso.", details: error.message });
+    await conn.rollback();
+    console.error("❌ Error al registrar regreso con imágenes:", error);
+    res.status(500).json({
+      error: "Error al registrar regreso con imágenes.",
+      details: error.message,
+    });
+  } finally {
+    conn.release();
   }
 };
 
