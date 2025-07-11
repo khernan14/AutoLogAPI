@@ -47,6 +47,7 @@ router.post(
   "/salida",
   authenticate,
   authorizeByPermisos("registrar_uso"),
+  upload.array("files", 10),
   validarRegistroSalida,
   registrarSalida
 );

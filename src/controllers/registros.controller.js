@@ -90,6 +90,63 @@ export const obtenerCombustibleActual = async (req, res) => {
 };
 
 // 🚗 Registrar la salida de un vehículo
+// export const registrarSalida = async (req, res) => {
+//   const {
+//     id_empleado,
+//     id_vehiculo,
+//     id_ubicacion_salida,
+//     km_salida,
+//     combustible_salida,
+//     comentario_salida,
+//   } = req.body;
+
+//   try {
+//     const fecha_salida = new Date(); // Ahora
+//     const fecha_regreso = null;
+
+//     await pool.query(
+//       `CALL GestionarRegistros(
+//         'InsertarSalida',
+//         NULL,     -- _id
+//         ?,        -- _id_empleado
+//         ?,        -- _id_vehiculo
+//         ?,        -- _id_ubicacion_salida
+//         NULL,     -- _id_ubicacion_regreso
+//         ?,        -- _km_salida
+//         NULL,     -- _km_regreso
+//         ?,        -- _combustible_salida
+//         NULL,     -- _combustible_regreso
+//         ?,        -- _comentario_salida
+//         NULL,     -- _comentario_regreso
+//         ?,        -- _fecha_salida
+//         NULL,     -- _fecha_regreso
+//         @insertId
+//       );`,
+//       [
+//         id_empleado,
+//         id_vehiculo,
+//         id_ubicacion_salida,
+//         km_salida,
+//         combustible_salida,
+//         comentario_salida,
+//         fecha_salida,
+//       ]
+//     );
+
+//     const [result] = await pool.query("SELECT @insertId AS insertId");
+
+//     res.status(201).json({
+//       message: "Registro de salida creado.",
+//       id_registro: result[0].insertId,
+//     });
+//   } catch (error) {
+//     console.error("❌ Error al registrar salida:", error);
+//     res
+//       .status(500)
+//       .json({ error: "Error al registrar salida.", details: error.message });
+//   }
+// };
+
 export const registrarSalida = async (req, res) => {
   const {
     id_empleado,
@@ -100,26 +157,24 @@ export const registrarSalida = async (req, res) => {
     comentario_salida,
   } = req.body;
 
-  try {
-    const fecha_salida = new Date(); // Ahora
-    const fecha_regreso = null;
+  const archivos = req.files;
 
-    await pool.query(
+  if (!archivos || archivos.length === 0) {
+    return res.status(400).json({ error: "Debes subir al menos una imagen." });
+  }
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    const fecha_salida = new Date();
+
+    await conn.query(
       `CALL GestionarRegistros(
         'InsertarSalida',
-        NULL,     -- _id
-        ?,        -- _id_empleado
-        ?,        -- _id_vehiculo
-        ?,        -- _id_ubicacion_salida
-        NULL,     -- _id_ubicacion_regreso
-        ?,        -- _km_salida
-        NULL,     -- _km_regreso
-        ?,        -- _combustible_salida
-        NULL,     -- _combustible_regreso
-        ?,        -- _comentario_salida
-        NULL,     -- _comentario_regreso
-        ?,        -- _fecha_salida
-        NULL,     -- _fecha_regreso
+        NULL, ?, ?, ?, NULL,
+        ?, NULL, ?, NULL,
+        ?, NULL, ?, NULL,
         @insertId
       );`,
       [
@@ -133,17 +188,40 @@ export const registrarSalida = async (req, res) => {
       ]
     );
 
-    const [result] = await pool.query("SELECT @insertId AS insertId");
+    const [[{ insertId }]] = await conn.query("SELECT @insertId AS insertId");
+
+    for (const file of archivos) {
+      const baseUrl = process.env.HOST?.replace(/\/$/, "") || "";
+      const url = `${baseUrl}/uploads/registros/${file.filename}`;
+
+      const [imageResult] = await conn.query(
+        "INSERT INTO images (type, url) VALUES (?, ?)",
+        [file.mimetype, url]
+      );
+
+      const id_image = imageResult.insertId;
+
+      await conn.query("CALL GestionarImagenes('Insertar', ?, ?);", [
+        insertId,
+        id_image,
+      ]);
+    }
+
+    await conn.commit();
 
     res.status(201).json({
-      message: "Registro de salida creado.",
-      id_registro: result[0].insertId,
+      message: "Registro de salida y subida de imágenes exitosos.",
+      id_registro: insertId,
     });
   } catch (error) {
-    console.error("❌ Error al registrar salida:", error);
-    res
-      .status(500)
-      .json({ error: "Error al registrar salida.", details: error.message });
+    await conn.rollback();
+    console.error("❌ Error al registrar salida con imágenes:", error);
+    res.status(500).json({
+      error: "Error al registrar salida con imágenes.",
+      details: error.message,
+    });
+  } finally {
+    conn.release();
   }
 };
 
@@ -200,31 +278,22 @@ export const registrarRegreso = async (req, res) => {
 };
 
 // 📸 Asociar imágenes a un registro
-// 📸 Asociar imágenes a un registro
 export const asociarImagenes = async (req, res) => {
   const id_registro = req.params.id;
   const archivos = req.files;
 
-  console.log("📌 Recibiendo petición para subir imágenes...");
-  console.log("📌 ID Registro recibido:", id_registro);
-  console.log("📌 Archivos recibidos:", archivos);
-
   if (!id_registro) {
-    console.error("❌ ERROR: id_registro no se recibió.");
     return res
       .status(400)
       .json({ error: "El ID del registro es obligatorio." });
   }
 
   if (!archivos || archivos.length === 0) {
-    console.error("❌ ERROR: No se enviaron archivos.");
     return res.status(400).json({ error: "No se enviaron archivos." });
   }
 
   try {
     for (const file of archivos) {
-      console.log("📂 Guardando archivo:", file.filename);
-
       // ✅ Usar HOST dinámico desde variables de entorno
       const baseUrl =
         process.env.HOST?.replace(/\/$/, "") || "http://localhost:3000";
@@ -236,35 +305,21 @@ export const asociarImagenes = async (req, res) => {
         [file.mimetype, url]
       );
 
-      console.log("✅ Imagen insertada, ID:", imageResult.insertId);
-
       const id_image = imageResult.insertId;
 
       if (!id_image) {
-        console.error(
-          "❌ ERROR: No se pudo obtener el ID de la imagen insertada."
-        );
         throw new Error("No se pudo obtener el ID de la imagen insertada.");
       }
 
       // ✅ Asociar la imagen al registro
-      console.log(
-        "🔗 Asociando imagen ID",
-        id_image,
-        "con registro ID",
-        id_registro
-      );
       const [relationResult] = await pool.query(
         "CALL GestionarImagenes('Insertar', ?, ?);",
         [id_registro, id_image]
       );
-
-      console.log("✅ Imagen asociada correctamente:", relationResult);
     }
 
     res.json({ message: "Imágenes asociadas correctamente." });
   } catch (error) {
-    console.error("❌ ERROR al subir imágenes:", error);
     res
       .status(500)
       .json({ error: "Error al subir imágenes.", details: error.message });

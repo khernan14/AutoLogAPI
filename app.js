@@ -19,6 +19,7 @@ import helpRoutes from "./src/routes/help.routes.js";
 import path from "path";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
+import multer from "multer";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -40,19 +41,6 @@ app.use(express.urlencoded({ extended: true }));
 
 const uploadsPath = path.join(__dirname, "src", "uploads");
 
-// const registrosPath = path.join(__dirname, "src", "uploads", "registros");
-
-// app.get("/api/listar-registros", (req, res) => {
-//   fs.readdir(registrosPath, (err, files) => {
-//     if (err) {
-//       console.error("Error leyendo carpeta registros:", err);
-//       return res.status(500).json({ error: "Error leyendo carpeta registros" });
-//     }
-
-//     res.json({ archivos: files });
-//   });
-// });
-
 // Routes
 app.use("/uploads", express.static(uploadsPath));
 app.use("/api/auth", authRoutes);
@@ -70,5 +58,22 @@ app.use("/api/grupos", gruposRoutes);
 app.use("/api/grupo-usuarios", grupoUsuariosRoutes);
 app.use("/api/reports", registerReportRoutes);
 app.use("/api/help", helpRoutes);
+
+// Middleware de manejo de errores de multer
+app.use((err, req, res, next) => {
+  if (err instanceof multer.MulterError) {
+    // Errores propios de multer (tamaño, etc)
+    return res.status(400).json({ error: err.message });
+  }
+
+  if (err.message.includes("Tipo de archivo no permitido")) {
+    // Nuestro custom error de tipo MIME no válido
+    return res.status(400).json({ error: err.message });
+  }
+
+  // Otros errores no manejados
+  console.error("❌ Error inesperado:", err);
+  return res.status(500).json({ error: "Error interno del servidor." });
+});
 
 export default app;
