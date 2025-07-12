@@ -1,5 +1,3 @@
-// src/routes/helpRoutes.js
-
 import express from "express";
 import {
   getFAQs,
@@ -20,29 +18,129 @@ import {
   deleteSystemService,
   addOverallStatusLog,
   getOverallStatusHistory,
-} from "../controllers/help.controller.js"; // Asegúrate de que esta ruta sea correcta
+} from "../controllers/help.controller.js";
 
-// Importa tus middlewares de autenticación y autorización
 import {
   authenticate,
   authorizeByPermisos,
-} from "../middleware/auth.middleware.js"; // Asegúrate de que esta ruta sea correcta
+} from "../middleware/auth.middleware.js";
 
 const router = express.Router();
 
-// --- Rutas para FAQs ---
-// Acceso público para obtener FAQs
+/**
+ * @swagger
+ * tags:
+ *   - name: FAQs
+ *     description: Preguntas frecuentes
+ *   - name: Tutoriales
+ *     description: Tutoriales del sistema
+ *   - name: Novedades
+ *     description: Anuncios y cambios recientes
+ *   - name: Servicios
+ *     description: Estado de servicios del sistema
+ *   - name: Estado General
+ *     description: Registro del estado general del sistema
+ */
+
+// FAQs
+/**
+ * @swagger
+ * /help/faqs:
+ *   get:
+ *     summary: Obtener todas las FAQs
+ *     tags: [FAQs]
+ *     responses:
+ *       200:
+ *         description: Lista de FAQs
+ */
 router.get("/faqs", getFAQs);
+
+/**
+ * @swagger
+ * /help/faqs/{id}:
+ *   get:
+ *     summary: Obtener una FAQ por ID
+ *     tags: [FAQs]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: FAQ encontrada
+ */
 router.get("/faqs/:id", getFAQs);
 
-// Acceso restringido para modificar FAQs
+/**
+ * @swagger
+ * /help/faqs:
+ *   post:
+ *     summary: Crear una nueva FAQ
+ *     tags: [FAQs]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               pregunta:
+ *                 type: string
+ *               respuesta:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: FAQ creada
+ */
 router.post("/faqs", authenticate, authorizeByPermisos("crear_faqs"), addFAQ);
+
+/**
+ * @swagger
+ * /help/faqs/{id}:
+ *   put:
+ *     summary: Actualizar una FAQ
+ *     tags: [FAQs]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: FAQ actualizada
+ */
 router.put(
   "/faqs/:id",
   authenticate,
   authorizeByPermisos("editar_faqs"),
   updateFAQ
 );
+
+/**
+ * @swagger
+ * /help/faqs/{id}:
+ *   delete:
+ *     summary: Eliminar una FAQ
+ *     tags: [FAQs]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: FAQ eliminada
+ */
 router.delete(
   "/faqs/:id",
   authenticate,
@@ -50,11 +148,19 @@ router.delete(
   deleteFAQ
 );
 
-// --- Rutas para Tutoriales ---
-// Acceso público para obtener tutoriales
+// Tutoriales
+/**
+ * @swagger
+ * /help/tutorials:
+ *   get:
+ *     summary: Obtener todos los tutoriales
+ *     tags: [Tutoriales]
+ *     responses:
+ *       200:
+ *         description: Lista de tutoriales
+ */
 router.get("/tutorials", getTutorials);
 
-// Acceso restringido para modificar tutoriales
 router.post(
   "/tutorials",
   authenticate,
@@ -74,11 +180,19 @@ router.delete(
   deleteTutorial
 );
 
-// --- Rutas para Changelogs (Novedades y Anuncios) ---
-// Acceso público para obtener changelogs
+// Changelogs
+/**
+ * @swagger
+ * /help/changelogs:
+ *   get:
+ *     summary: Obtener lista de novedades
+ *     tags: [Novedades]
+ *     responses:
+ *       200:
+ *         description: Lista de changelogs
+ */
 router.get("/changelogs", getChangelogs);
 
-// Acceso restringido para modificar changelogs
 router.post(
   "/changelogs",
   authenticate,
@@ -98,11 +212,19 @@ router.delete(
   deleteChangelog
 );
 
-// --- Rutas para System Services (Estado de Servicios) ---
-// Acceso público para obtener el estado de los servicios
+// Servicios del sistema
+/**
+ * @swagger
+ * /help/services:
+ *   get:
+ *     summary: Obtener estado de los servicios del sistema
+ *     tags: [Servicios]
+ *     responses:
+ *       200:
+ *         description: Estado actual
+ */
 router.get("/services", getSystemServices);
 
-// Acceso restringido para modificar servicios del sistema
 router.post(
   "/services",
   authenticate,
@@ -122,11 +244,31 @@ router.delete(
   deleteSystemService
 );
 
-// --- Rutas para System Overall Status Log (Historial de Estado General) ---
-// Acceso público para obtener el historial de estado general
+// Estado General del sistema
+/**
+ * @swagger
+ * /help/status/history:
+ *   get:
+ *     summary: Obtener historial de estado general
+ *     tags: [Estado General]
+ *     responses:
+ *       200:
+ *         description: Lista de estados históricos
+ */
 router.get("/status/history", getOverallStatusHistory);
 
-// Acceso restringido para registrar un nuevo estado general (probablemente para un sistema automatizado o admin)
+/**
+ * @swagger
+ * /help/status/log:
+ *   post:
+ *     summary: Registrar nuevo estado general
+ *     tags: [Estado General]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       201:
+ *         description: Estado registrado
+ */
 router.post(
   "/status/log",
   authenticate,

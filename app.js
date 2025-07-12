@@ -20,6 +20,11 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
 import multer from "multer";
+import {
+  swaggerUi,
+  swaggerSpec,
+  swaggerCustomOptions,
+} from "./src/config/swagger.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -40,6 +45,13 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 const uploadsPath = path.join(__dirname, "src", "uploads");
+
+// Swagger UI (para documentación)
+app.use(
+  "/api-docs",
+  swaggerUi.serve,
+  swaggerUi.setup(swaggerSpec, swaggerCustomOptions)
+);
 
 // Routes
 app.use("/uploads", express.static(uploadsPath));

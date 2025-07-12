@@ -10,7 +10,7 @@ import {
   getTotalVehiculos,
   getVehiculosEnUso,
   getVehiculosEnMantenimiento,
-} from "../controllers/Reports/registerReport.controller.js"; // Asegúrate que todas las funciones están exportadas desde aquí
+} from "../controllers/Reports/registerReport.controller.js";
 import {
   authenticate,
   authorizeByPermisos,
@@ -18,7 +18,25 @@ import {
 
 const router = Router();
 
-// Ruta para obtener todos los registros (ya existente)
+/**
+ * @swagger
+ * tags:
+ *   - name: Reportes
+ *     description: Rutas para obtener reportes generales y métricas del dashboard
+ */
+
+/**
+ * @swagger
+ * /reportes/registros:
+ *   get:
+ *     summary: Obtener todos los registros
+ *     tags: [Reportes]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Registros obtenidos correctamente
+ */
 router.get(
   "/registros",
   authenticate,
@@ -26,16 +44,31 @@ router.get(
   getRegistros
 );
 
-// Nuevas rutas para los reportes específicos
-// Reporte: Empleados con más salidas
+/**
+ * @swagger
+ * /reportes/empleados-mas-salidas:
+ *   get:
+ *     summary: Obtener empleados con más salidas
+ *     tags: [Reportes]
+ *     security:
+ *       - bearerAuth: []
+ */
 router.get(
   "/reportes/empleados-mas-salidas",
   authenticate,
-  authorizeByPermisos("ver_reportes"), // Asumo que el permiso para ver reportes es el mismo
+  authorizeByPermisos("ver_reportes"),
   getReporteEmpleadosMasSalidas
 );
 
-// Reporte: Kilometraje total recorrido por empleado
+/**
+ * @swagger
+ * /reportes/kilometraje-por-empleado:
+ *   get:
+ *     summary: Obtener kilometraje por empleado
+ *     tags: [Reportes]
+ *     security:
+ *       - bearerAuth: []
+ */
 router.get(
   "/reportes/kilometraje-por-empleado",
   authenticate,
@@ -43,7 +76,15 @@ router.get(
   getReporteKilometrajePorEmpleado
 );
 
-// Reporte: Vehículos más utilizados
+/**
+ * @swagger
+ * /reportes/vehiculos-mas-utilizados:
+ *   get:
+ *     summary: Obtener vehículos más utilizados
+ *     tags: [Reportes]
+ *     security:
+ *       - bearerAuth: []
+ */
 router.get(
   "/reportes/vehiculos-mas-utilizados",
   authenticate,
@@ -51,7 +92,15 @@ router.get(
   getReporteVehiculosMasUtilizados
 );
 
-// Reporte: Registros por ubicación
+/**
+ * @swagger
+ * /reportes/registros-por-ubicacion:
+ *   get:
+ *     summary: Obtener registros por ubicación
+ *     tags: [Reportes]
+ *     security:
+ *       - bearerAuth: []
+ */
 router.get(
   "/reportes/registros-por-ubicacion",
   authenticate,
@@ -59,7 +108,15 @@ router.get(
   getReporteRegistrosPorUbicacion
 );
 
-// Reporte: Consumo promedio de combustible por vehículo
+/**
+ * @swagger
+ * /reportes/consumo-combustible-vehiculo:
+ *   get:
+ *     summary: Obtener consumo de combustible por vehículo
+ *     tags: [Reportes]
+ *     security:
+ *       - bearerAuth: []
+ */
 router.get(
   "/reportes/consumo-combustible-vehiculo",
   authenticate,
@@ -67,25 +124,65 @@ router.get(
   getReporteConsumoCombustibleVehiculo
 );
 
-// Nuevas rutas para las métricas del Home
+// --- MÉTRICAS DEL DASHBOARD ---
+
+/**
+ * @swagger
+ * /reportes/total-empleados:
+ *   get:
+ *     summary: Obtener total de empleados
+ *     tags: [Reportes]
+ *     security:
+ *       - bearerAuth: []
+ */
 router.get(
   "/reportes/total-empleados",
   authenticate,
-  authorizeByPermisos("gestionar_home"), // O un permiso más específico si lo tienes
+  authorizeByPermisos("gestionar_home"),
   getTotalEmpleados
 );
+
+/**
+ * @swagger
+ * /reportes/total-vehiculos:
+ *   get:
+ *     summary: Obtener total de vehículos
+ *     tags: [Reportes]
+ *     security:
+ *       - bearerAuth: []
+ */
 router.get(
   "/reportes/total-vehiculos",
   authenticate,
   authorizeByPermisos("gestionar_home"),
   getTotalVehiculos
 );
+
+/**
+ * @swagger
+ * /reportes/vehiculos-en-uso:
+ *   get:
+ *     summary: Obtener vehículos actualmente en uso
+ *     tags: [Reportes]
+ *     security:
+ *       - bearerAuth: []
+ */
 router.get(
   "/reportes/vehiculos-en-uso",
   authenticate,
   authorizeByPermisos("gestionar_home"),
   getVehiculosEnUso
 );
+
+/**
+ * @swagger
+ * /reportes/vehiculos-en-mantenimiento:
+ *   get:
+ *     summary: Obtener vehículos en mantenimiento
+ *     tags: [Reportes]
+ *     security:
+ *       - bearerAuth: []
+ */
 router.get(
   "/reportes/vehiculos-en-mantenimiento",
   authenticate,
