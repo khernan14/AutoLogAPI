@@ -108,6 +108,7 @@ export const getReporteEmpleadosMasSalidas = async (req, res) => {
           usuarios u ON e.id_usuario = u.id_usuario
       LEFT JOIN
           registros r ON e.id = r.id_empleado
+      WHERE u.rol != 'Admin'
       GROUP BY
           u.nombre, e.puesto
       ORDER BY
@@ -141,6 +142,7 @@ export const getReporteKilometrajePorEmpleado = async (req, res) => {
           usuarios u ON e.id_usuario = u.id_usuario
       LEFT JOIN
           registros r ON e.id = r.id_empleado
+      WHERE u.rol != 'Admin'
       GROUP BY
           u.nombre, e.puesto
       ORDER BY
@@ -217,6 +219,7 @@ export const getReporteRegistrosPorUbicacion = async (req, res) => {
           estacionamientos es ON r.id_ubicacion_salida = es.id
       LEFT JOIN
           estacionamientos er ON r.id_ubicacion_regreso = er.id
+      WHERE u.rol != 'Admin'
       ORDER BY
           r.fecha_salida DESC;
     `);
@@ -278,7 +281,9 @@ export const getReporteConsumoCombustibleVehiculo = async (req, res) => {
 export const getTotalEmpleados = async (req, res) => {
   try {
     const [rows] = await pool.query(`
-      SELECT COUNT(id) AS total FROM empleados WHERE estatus = 'Activo';
+      SELECT COUNT(id_usuario) AS total
+      FROM usuarios
+      WHERE estatus = 'Activo' AND rol != 'Admin';
     `);
     res.json(rows[0] || { total: 0 }); // Retorna el primer resultado o un objeto con total 0
   } catch (error) {
