@@ -16,6 +16,21 @@ import gruposRoutes from "./src/routes/AutoLog/grupos.routes.js";
 import grupoUsuariosRoutes from "./src/routes/AutoLog/grupoUsuarios.routes.js";
 import registerReportRoutes from "./src/routes/AutoLog/registerReport.routes.js";
 import helpRoutes from "./src/routes/AutoLog/help.routes.js";
+
+//rutas de Inventario
+import clientesRoutes from "./src/routes/Inventario/clientes.routes.js";
+import siteRoutes from "./src/routes/Inventario/sites.routes.js";
+import bodegasRoutes from "./src/routes/Inventario/bodega.routes.js";
+import activosRoutes from "./src/routes/Inventario/activos.routes.js";
+import ubicacionesRoutes from "./src/routes/Inventario/ubicaciones.routes.js";
+import contratosRoutes from "./src/routes/Inventario/contratos.routes.js";
+import adendasRoutes from "./src/routes/Inventario/adendas.routes.js";
+import detalleAdendaRoutes from "./src/routes/Inventario/detalleAdenda.routes.js";
+import contratosActivosRoutes from "./src/routes/Inventario/contratosActivos.routes.js";
+import salesOrdersRoutes from "./src/routes/Inventario/salesOrders.routes.js";
+import salesOrdersActivosRoutes from "./src/routes/Inventario/salesOrdersActivos.routes.js";
+import publicActivosRoutes from "./src/routes/Public/publicActivos.routes.js";
+
 import path from "path";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
@@ -70,6 +85,20 @@ app.use("/api/grupos", gruposRoutes);
 app.use("/api/grupo-usuarios", grupoUsuariosRoutes);
 app.use("/api/reports", registerReportRoutes);
 app.use("/api/help", helpRoutes);
+
+//rutas de Inventario
+app.use("/api/clientes", clientesRoutes);
+app.use("/api/sites", siteRoutes);
+app.use("/api/inventario/bodegas", bodegasRoutes);
+app.use("/api/inventario/activos", activosRoutes);
+app.use("/api/inventario/ubicaciones", ubicacionesRoutes);
+app.use("/api/inventario/contratos", contratosRoutes);
+app.use("/api/inventario/adendas", adendasRoutes);
+app.use("/api/inventario/detalle-adenda", detalleAdendaRoutes);
+app.use("/api/inventario/contratos-activos", contratosActivosRoutes);
+app.use("/api/inventario/sales-orders", salesOrdersRoutes);
+app.use("/api/inventario/sales-orders/lineas", salesOrdersActivosRoutes);
+app.use("/public", publicActivosRoutes);
 
 // Middleware de manejo de errores de multer
 app.use((err, req, res, next) => {
