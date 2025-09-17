@@ -15,7 +15,9 @@ import mailRoutes from "./src/routes/AutoLog/mail.routes.js";
 import gruposRoutes from "./src/routes/AutoLog/grupos.routes.js";
 import grupoUsuariosRoutes from "./src/routes/AutoLog/grupoUsuarios.routes.js";
 import registerReportRoutes from "./src/routes/AutoLog/registerReport.routes.js";
-import helpRoutes from "./src/routes/AutoLog/help.routes.js";
+// import helpRoutes from "./src/routes/AutoLog/help.routes.js";
+import helpPublicRoutes from "./src/routes/AutoLog/help.public.routes.js";
+import helpAdminRoutes from "./src/routes/AutoLog/help.admin.routes.js";
 
 //rutas de Inventario
 import clientesRoutes from "./src/routes/Inventario/clientes.routes.js";
@@ -84,7 +86,9 @@ app.use("/api/mail", mailRoutes);
 app.use("/api/grupos", gruposRoutes);
 app.use("/api/grupo-usuarios", grupoUsuariosRoutes);
 app.use("/api/reports", registerReportRoutes);
-app.use("/api/help", helpRoutes);
+// app.use("/api/help", helpRoutes);
+app.use("/api", helpPublicRoutes);
+app.use("/api", helpAdminRoutes);
 
 //rutas de Inventario
 app.use("/api/clientes", clientesRoutes);
