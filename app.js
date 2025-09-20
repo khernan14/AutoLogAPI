@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import "dotenv/config";
+import pool from "./src/config/connectionToSql.js"; // ajusta la ruta si difiere
 import authRoutes from "./src/routes/AutoLog/auth.routes.js";
 import empleadosRoutes from "./src/routes/AutoLog/empleados.routes.js";
 import vehiculosRoutes from "./src/routes/AutoLog/vehiculos.routes.js";
@@ -70,6 +71,17 @@ app.use(
   swaggerUi.serve,
   swaggerUi.setup(swaggerSpec, swaggerCustomOptions)
 );
+
+app.get("/health", async (req, res) => {
+  try {
+    // Ping super rápido a la DB (opcional)
+    await pool.query("SELECT 1");
+    res.status(200).json({ ok: true, db: "up" });
+  } catch (e) {
+    // Si tu DB tarda en levantar, puedes devolver 200 igualmente para no matar el contenedor
+    res.status(500).json({ ok: false, db: "down" });
+  }
+});
 
 // Routes
 app.use("/uploads", express.static(uploadsPath));
