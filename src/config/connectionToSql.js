@@ -1,25 +1,54 @@
-import mysql from "mysql2/promise"; // usa versión con promesas
+// src/config/connectionToSql.js
+import mysql from "mysql2/promise";
+import dns from "dns";
+
+// Fuerza prioridad IPv4 para evitar conexiones AAAA/IPv6
+dns.setDefaultResultOrder("ipv4first");
+
+const host =
+  process.env.MYSQLHOST ||
+  process.env.DB_HOST || // fallback si usas tu propio naming
+  "mysql.railway.internal";
+
+const port = Number(process.env.MYSQLPORT || process.env.DB_PORT || 3306);
+
+const user = process.env.MYSQLUSER || process.env.DB_USER || "root";
+
+const password = process.env.MYSQLPASSWORD || process.env.DB_PASSWORD || "";
+
+const database =
+  process.env.MYSQLDATABASE || process.env.DB_DATABASE || "railway";
+
+// Si tu proveedor de MySQL exige SSL (PlanetScale / servicios managed con TLS), pon SSL en true.
+const USE_SSL = String(process.env.MYSQL_SSL || "").toLowerCase() === "true";
 
 const pool = mysql.createPool({
-  host: process.env.DB_HOST || "mysql.railway.internal",
-  port: process.env.DB_PORT || 3306,
-  user: process.env.DB_USER || "root",
-  password: process.env.DB_PASSWORD || "",
-  database: process.env.DB_DATABASE || "railway",
+  host,
+  port,
+  user,
+  password,
+  database,
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
-  // ssl: { rejectUnauthorized: true }, ❌ NO uses esto para host interno
+  enableKeepAlive: true,
+  keepAliveInitialDelay: 0,
+  ...(USE_SSL ? { ssl: { rejectUnauthorized: false } } : {}),
 });
 
 pool
   .getConnection()
   .then((conn) => {
-    console.log("✅ Conexión exitosa a la base de datos MySQL");
+    console.log("✅ Conexión MySQL OK:", {
+      host,
+      port,
+      database,
+      ssl: USE_SSL,
+    });
     conn.release();
   })
   .catch((err) => {
-    console.error("❌ Error al conectar a la base de datos:", err.message);
+    console.error("❌ Error al conectar a MySQL:", err?.message);
   });
 
 export default pool;
