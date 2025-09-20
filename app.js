@@ -18,6 +18,7 @@ import registerReportRoutes from "./src/routes/AutoLog/registerReport.routes.js"
 // import helpRoutes from "./src/routes/AutoLog/help.routes.js";
 import helpPublicRoutes from "./src/routes/AutoLog/help.public.routes.js";
 import helpAdminRoutes from "./src/routes/AutoLog/help.admin.routes.js";
+import searchRoutes from "./src/routes/AutoLog/search.routes.js";
 
 //rutas de Inventario
 import clientesRoutes from "./src/routes/Inventario/clientes.routes.js";
@@ -89,6 +90,7 @@ app.use("/api/reports", registerReportRoutes);
 // app.use("/api/help", helpRoutes);
 app.use("/api", helpPublicRoutes);
 app.use("/api", helpAdminRoutes);
+app.use("/api", searchRoutes);
 
 //rutas de Inventario
 app.use("/api/clientes", clientesRoutes);
