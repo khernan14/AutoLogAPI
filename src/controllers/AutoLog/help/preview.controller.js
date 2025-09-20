@@ -15,9 +15,15 @@ function normalize({
   return { kind, id, title, subtitle, fields, moduleUrl, canEdit };
 }
 
+// Helper pequeño
+const f = (label, value) =>
+  value !== null && value !== undefined && value !== ""
+    ? { label, value }
+    : null;
+
 /**
  * GET /api/preview?kind=asset&id=123
- * kind soportados: asset, company, site, warehouse, vehicle, city, country, parking, record, so, faq, tutorial
+ * kinds: asset, company, site, warehouse, vehicle, city, country, parking, record, so, faq, tutorial
  */
 export const getPreview = asyncHandler(async (req, res) => {
   const kind = String(req.query.kind || "")
@@ -29,13 +35,6 @@ export const getPreview = asyncHandler(async (req, res) => {
     return res.status(400).json({ message: "Parámetros requeridos: kind, id" });
   }
 
-  // Helper: arma par de campos si están presentes
-  const f = (label, value) =>
-    value !== null && value !== undefined && value !== ""
-      ? { label, value }
-      : null;
-
-  // Enrutar por tipo
   switch (kind) {
     case "asset": {
       const [[row]] = await pool.query(
@@ -44,6 +43,7 @@ export const getPreview = asyncHandler(async (req, res) => {
       );
       if (!row)
         return res.status(404).json({ message: "Activo no encontrado" });
+
       const fields = [
         f("Código", row.codigo),
         f("Modelo", row.modelo),
@@ -76,6 +76,7 @@ export const getPreview = asyncHandler(async (req, res) => {
       );
       if (!row)
         return res.status(404).json({ message: "Compañía no encontrada" });
+
       const fields = [
         f("Código", row.codigo),
         f("Estatus", row.estatus),
@@ -92,7 +93,7 @@ export const getPreview = asyncHandler(async (req, res) => {
           title: row.nombre,
           subtitle: row.codigo || "",
           fields,
-          moduleUrl: `/admin/clientes?focus=${row.id}`,
+          moduleUrl: `/admin/clientes/${row.id}/info`,
           canEdit: true,
         })
       );
@@ -100,13 +101,14 @@ export const getPreview = asyncHandler(async (req, res) => {
 
     case "site": {
       const [[row]] = await pool.query(
-        `SELECT s.id, s.nombre, s.descripcion, c.nombre AS ciudad
+        `SELECT s.id, s.nombre, s.descripcion, s.id_cliente, c.nombre AS ciudad
          FROM clientes_sites s
          LEFT JOIN ciudades c ON c.id = s.id_ciudad
          WHERE s.id = ? LIMIT 1`,
         [id]
       );
       if (!row) return res.status(404).json({ message: "Site no encontrado" });
+
       const fields = [
         f("Ciudad", row.ciudad),
         f("Descripción", row.descripcion),
@@ -119,7 +121,8 @@ export const getPreview = asyncHandler(async (req, res) => {
           title: row.nombre,
           subtitle: "Site de cliente",
           fields,
-          moduleUrl: `/admin/clientes?tab=sites&focus=${row.id}`,
+          // ⬇️ Ruta real que tienes: admin/clientes/:idCliente/sites, marcando focus del site
+          moduleUrl: `/admin/clientes/${row.id_cliente}/sites?focus=${row.id}`,
           canEdit: true,
         })
       );
@@ -135,6 +138,7 @@ export const getPreview = asyncHandler(async (req, res) => {
       );
       if (!row)
         return res.status(404).json({ message: "Bodega no encontrada" });
+
       const fields = [
         f("Ciudad", row.ciudad),
         f("Descripción", row.descripcion),
@@ -162,6 +166,7 @@ export const getPreview = asyncHandler(async (req, res) => {
       );
       if (!row)
         return res.status(404).json({ message: "Vehículo no encontrado" });
+
       const fields = [
         f("Marca", row.marca),
         f("Modelo", row.modelo),
@@ -188,6 +193,7 @@ export const getPreview = asyncHandler(async (req, res) => {
       );
       if (!row)
         return res.status(404).json({ message: "Ciudad no encontrada" });
+
       return res.json(
         normalize({
           kind: "city",
@@ -207,6 +213,7 @@ export const getPreview = asyncHandler(async (req, res) => {
         [id]
       );
       if (!row) return res.status(404).json({ message: "País no encontrado" });
+
       return res.json(
         normalize({
           kind: "country",
@@ -232,7 +239,9 @@ export const getPreview = asyncHandler(async (req, res) => {
         return res
           .status(404)
           .json({ message: "Estacionamiento no encontrado" });
+
       const fields = [f("Ciudad", row.ciudad)].filter(Boolean);
+
       return res.json(
         normalize({
           kind: "parking",
@@ -254,12 +263,14 @@ export const getPreview = asyncHandler(async (req, res) => {
       );
       if (!row)
         return res.status(404).json({ message: "Registro no encontrado" });
+
       const fields = [
         f("Fecha salida", row.fecha_salida),
         f("Fecha regreso", row.fecha_regreso),
         f("Comentario salida", row.comentario_salida),
         f("Comentario regreso", row.comentario_regreso),
       ].filter(Boolean);
+
       return res.json(
         normalize({
           kind: "record",
@@ -281,9 +292,11 @@ export const getPreview = asyncHandler(async (req, res) => {
       );
       if (!row)
         return res.status(404).json({ message: "Sales Order no encontrado" });
+
       const fields = [f("Estatus", row.estatus), f("Fecha", row.fecha)].filter(
         Boolean
       );
+
       return res.json(
         normalize({
           kind: "reporte",
@@ -299,11 +312,13 @@ export const getPreview = asyncHandler(async (req, res) => {
 
     case "faq": {
       const [[row]] = await pool.query(
-        `SELECT id, question AS title, category FROM faqs WHERE id = ? LIMIT 1`,
+        `SELECT id, slug, question AS title, category FROM faqs WHERE id = ? LIMIT 1`,
         [id]
       );
       if (!row) return res.status(404).json({ message: "FAQ no encontrada" });
+
       const fields = [f("Categoría", row.category)].filter(Boolean);
+
       return res.json(
         normalize({
           kind: "soporte",
@@ -311,20 +326,23 @@ export const getPreview = asyncHandler(async (req, res) => {
           title: row.title,
           subtitle: "FAQ",
           fields,
-          moduleUrl: `/admin/support/faqs/${row.id}`,
-          canEdit: true,
+          // ⬇️ Vista pública (no gestión):
+          moduleUrl: `/admin/help/faqs/${row.slug}`,
+          canEdit: false,
         })
       );
     }
 
     case "tutorial": {
       const [[row]] = await pool.query(
-        `SELECT id, title, category FROM tutorials WHERE id = ? LIMIT 1`,
+        `SELECT id, slug, title, category FROM tutorials WHERE id = ? LIMIT 1`,
         [id]
       );
       if (!row)
         return res.status(404).json({ message: "Tutorial no encontrado" });
+
       const fields = [f("Categoría", row.category)].filter(Boolean);
+
       return res.json(
         normalize({
           kind: "soporte",
@@ -332,8 +350,9 @@ export const getPreview = asyncHandler(async (req, res) => {
           title: row.title,
           subtitle: "Tutorial",
           fields,
-          moduleUrl: `/admin/support/tutorials/${row.id}`,
-          canEdit: true,
+          // ⬇️ Vista pública:
+          moduleUrl: `/admin/help/tutorials/${row.slug}`,
+          canEdit: false,
         })
       );
     }

@@ -2,7 +2,16 @@
 import pool from "../../../config/connectionToSql.js";
 import { asyncHandler } from "../../../utils/asyncHandler.js";
 
-// Normaliza q y evita inyecciones básicas
+// ===== Helpers de auth/rol para filtrar visibilidad pública =====
+function getRole(req) {
+  // Ajusta a tu middleware real:
+  const rol = req.user?.rol || "Empleado"; // Empleado | Supervisor | Admin
+  const isAdmin = rol === "Admin";
+  const isInternal = isAdmin || rol === "Empleado" || rol === "Supervisor";
+  return { rol, isAdmin, isInternal };
+}
+
+// Normaliza q (y evita inyección simple)
 function sanitize(q) {
   return String(q || "")
     .trim()
@@ -13,25 +22,28 @@ function shapeItem({ id, title, subtitle, url, kind, perm, exact = false }) {
   return { id, title, subtitle, url, kind, perm, exact };
 }
 
-// helpers de URL (ajusta si tus rutas reales difieren)
+// URLs a tus rutas reales
 const url = {
   activo: (id) => `/admin/inventario/activos?focus=${id}`,
-  cliente: (id) => `/admin/clientes?focus=${id}`,
-  site: (id) => `/admin/clientes?tab=sites&focus=${id}`,
-  bodega: (id) => `/admin/inventario/bodegas?focus=${id}`,
+  cliente: (id) => `/admin/clientes/${id}/info`,
+  site: (idCliente, idSite) =>
+    `/admin/clientes/${idCliente}/sites?focus=${idSite}`,
+  bodega: (id) => `/admin/inventario/bodegas/${id}`,
   vehiculo: (id) => `/admin/vehiculos?focus=${id}`,
   ciudad: (id) => `/admin/cities?focus=${id}`,
   pais: (id) => `/admin/countries?focus=${id}`,
   estacionamiento: (id) => `/admin/parkings?focus=${id}`,
-  registro: (id) => `/admin/reports?focus=${id}`,
+  registro: (id) => `/admin/panel-vehiculos?focus=${id}`,
   so: (id) => `/admin/reports?so=${id}`,
-  faq: (id) => `/admin/support/faqs/${id}`,
-  tutorial: (id) => `/admin/support/tutorials/${id}`,
+  faqPublic: (slug) => `/admin/help/faqs/${slug}`,
+  tutorialPublic: (slug) => `/admin/help/tutorials/${slug}`,
+  changelogPublic: (slug) => `/admin/help/changelog/${slug}`,
+  statusPublic: (q) =>
+    q ? `/admin/help/status?q=${encodeURIComponent(q)}` : `/admin/help/status`,
 };
 
-// ========== BÚSQUEDAS ==========
+// ========== BÚSQUEDAS de módulos ==========
 
-// ACTIVOS: nombre, modelo, serial_number, codigo
 async function searchActivos(q, limit) {
   const like = `%${q}%`;
   const [rows] = await pool.query(
@@ -59,7 +71,6 @@ async function searchActivos(q, limit) {
   });
 }
 
-// CLIENTES: nombre / código
 async function searchClientes(q, limit) {
   const like = `%${q}%`;
   const [rows] = await pool.query(
@@ -82,7 +93,6 @@ async function searchClientes(q, limit) {
   );
 }
 
-// SITES: nombre
 async function searchSites(q, limit) {
   const like = `%${q}%`;
   const [rows] = await pool.query(
@@ -97,14 +107,14 @@ async function searchSites(q, limit) {
       id: `site-${r.id}`,
       title: r.nombre,
       subtitle: "Site de cliente",
-      url: url.site(r.id),
+      // ⬇️ Ruta real por compañía:
+      url: url.site(r.id_cliente, r.id),
       kind: "site",
       perm: "gestionar_companias",
     })
   );
 }
 
-// BODEGAS: nombre (+ ciudad)
 async function searchBodegas(q, limit) {
   const like = `%${q}%`;
   const [rows] = await pool.query(
@@ -127,7 +137,6 @@ async function searchBodegas(q, limit) {
   );
 }
 
-// VEHÍCULOS: placa, marca, modelo
 async function searchVehiculos(q, limit) {
   const like = `%${q}%`;
   const [rows] = await pool.query(
@@ -150,7 +159,6 @@ async function searchVehiculos(q, limit) {
   );
 }
 
-// CIUDADES: nombre
 async function searchCiudades(q, limit) {
   const like = `%${q}%`;
   const [rows] = await pool.query(
@@ -169,7 +177,6 @@ async function searchCiudades(q, limit) {
   );
 }
 
-// PAÍSES: nombre
 async function searchPaises(q, limit) {
   const like = `%${q}%`;
   const [rows] = await pool.query(
@@ -188,7 +195,6 @@ async function searchPaises(q, limit) {
   );
 }
 
-// ESTACIONAMIENTOS: nombre (+ ciudad)
 async function searchEstacionamientos(q, limit) {
   const like = `%${q}%`;
   const [rows] = await pool.query(
@@ -211,7 +217,6 @@ async function searchEstacionamientos(q, limit) {
   );
 }
 
-// REGISTROS: por id exacto (numérico) o por comentarios
 async function searchRegistros(q, limit) {
   const like = `%${q}%`;
   const isNum = /^\d+$/.test(q);
@@ -237,7 +242,6 @@ async function searchRegistros(q, limit) {
   );
 }
 
-// SALES ORDERS: por código
 async function searchSalesOrders(q, limit) {
   const like = `%${q}%`;
   const [rows] = await pool.query(
@@ -260,61 +264,156 @@ async function searchSalesOrders(q, limit) {
   );
 }
 
-// FAQs / Tutorials: título
-async function searchFaqs(q, limit) {
+// ========== BÚSQUEDAS de ayuda pública ==========
+
+async function searchFaqsPublic(req, q, limit) {
+  const { isInternal } = getRole(req);
   const like = `%${q}%`;
+
+  // Public siempre; Internal si el usuario es interno
+  const vis = isInternal ? ["public", "internal"] : ["public"];
+
   const [rows] = await pool.query(
-    `SELECT id, question AS title, category
+    `SELECT id, slug, question AS title, category
      FROM faqs
      WHERE (question LIKE ?)
+       AND visibility IN (${vis.map(() => "?").join(",")})
      LIMIT ?`,
-    [like, limit]
+    [like, ...vis, limit]
   );
+
   return rows.map((r) =>
     shapeItem({
       id: `faq-${r.id}`,
       title: r.title,
       subtitle: r.category ? `FAQ • ${r.category}` : "FAQ",
-      url: url.faq(r.id),
+      url: url.faqPublic(r.slug),
       kind: "soporte",
-      perm: "help_manage",
+      perm: null,
     })
   );
 }
-async function searchTutorials(q, limit) {
+
+async function searchTutorialsPublic(req, q, limit) {
+  const { isInternal } = getRole(req);
   const like = `%${q}%`;
+  const vis = isInternal ? ["public", "internal"] : ["public"];
+
   const [rows] = await pool.query(
-    `SELECT id, title, category
+    `SELECT id, slug, title, category
      FROM tutorials
      WHERE (title LIKE ?)
+       AND visibility IN (${vis.map(() => "?").join(",")})
      LIMIT ?`,
-    [like, limit]
+    [like, ...vis, limit]
   );
+
   return rows.map((r) =>
     shapeItem({
       id: `tutorial-${r.id}`,
       title: r.title,
       subtitle: r.category ? `Tutorial • ${r.category}` : "Tutorial",
-      url: url.tutorial(r.id),
+      url: url.tutorialPublic(r.slug),
       kind: "soporte",
-      perm: "help_manage",
+      perm: null,
     })
   );
+}
+
+async function searchChangelogsPublic(req, q, limit) {
+  const { isInternal, isAdmin } = getRole(req);
+  const like = `%${q}%`;
+
+  // Audiencias visibles
+  const audiences = ["all"];
+  if (isInternal) audiences.push("internal", "customers");
+  if (isAdmin) audiences.push("admins");
+
+  const [rows] = await pool.query(
+    `SELECT id, slug, title, DATE_FORMAT(date, '%Y-%m-%d') AS day, type
+     FROM changelogs
+     WHERE (title LIKE ? OR description LIKE ?)
+       AND audience IN (${audiences.map(() => "?").join(",")})
+     ORDER BY date DESC
+     LIMIT ?`,
+    [like, like, ...audiences, limit]
+  );
+
+  return rows.map((r) =>
+    shapeItem({
+      id: `ch-${r.id}`,
+      title: r.title,
+      subtitle: `${r.type} • ${r.day}`,
+      url: url.changelogPublic(r.slug),
+      kind: "soporte",
+      perm: null,
+    })
+  );
+}
+
+async function searchStatusPublic(q, limit) {
+  const like = `%${q}%`;
+
+  // 1) servicios por nombre o mensaje
+  const [svc] = await pool.query(
+    `SELECT name, status, message
+     FROM system_services
+     WHERE (name LIKE ? OR message LIKE ?)
+     ORDER BY group_name, display_order
+     LIMIT ?`,
+    [like, like, limit]
+  );
+
+  // 2) overall por descripción (opcional; muestra la página general igual)
+  const [overall] = await pool.query(
+    `SELECT overall_status, description, DATE_FORMAT(status_timestamp, '%Y-%m-%d %H:%i') AS ts
+     FROM system_overall_status_log
+     WHERE (description LIKE ?)
+     ORDER BY status_timestamp DESC
+     LIMIT ?`,
+    [like, limit]
+  );
+
+  const items = [];
+
+  svc.forEach((r, i) =>
+    items.push(
+      shapeItem({
+        id: `svc-${i}`,
+        title: r.name,
+        subtitle: r.message ? `${r.status} • ${r.message}` : r.status,
+        url: url.statusPublic(r.name),
+        kind: "soporte",
+        perm: null,
+      })
+    )
+  );
+
+  overall.forEach((r, i) =>
+    items.push(
+      shapeItem({
+        id: `ovr-${i}`,
+        title: `Estado general: ${r.overall_status}`,
+        subtitle: r.description ? `${r.ts} • ${r.description}` : r.ts,
+        url: url.statusPublic(q),
+        kind: "soporte",
+        perm: null,
+      })
+    )
+  );
+
+  return items.slice(0, limit);
 }
 
 // ========== CONTROLADOR PRINCIPAL ==========
 
 export const globalSearch = asyncHandler(async (req, res) => {
   const q = sanitize(req.query.q);
-  // limit robusto
   const n = parseInt(req.query.limit, 10);
   const limit = Number.isFinite(n) ? Math.min(Math.max(n, 1), 20) : 10;
 
-  if (!q || q.length < 2) {
-    return res.json([]);
-  }
+  if (!q || q.length < 2) return res.json([]);
 
-  // Ejecutamos en paralelo, cada uno con un pequeño tope (no estrictamente suma = limit)
   const per = Math.max(3, Math.ceil(limit / 3));
 
   const [
@@ -328,8 +427,10 @@ export const globalSearch = asyncHandler(async (req, res) => {
     estacionamientos,
     registros,
     salesOrders,
-    faqs,
-    tutorials,
+    faqsPub,
+    tutorialsPub,
+    changelogsPub,
+    statusPub,
   ] = await Promise.all([
     searchActivos(q, per),
     searchClientes(q, per),
@@ -341,11 +442,13 @@ export const globalSearch = asyncHandler(async (req, res) => {
     searchEstacionamientos(q, per),
     searchRegistros(q, per),
     searchSalesOrders(q, per),
-    searchFaqs(q, 2),
-    searchTutorials(q, 2),
+    searchFaqsPublic(req, q, 3),
+    searchTutorialsPublic(req, q, 3),
+    searchChangelogsPublic(req, q, 3),
+    searchStatusPublic(q, 3),
   ]);
 
-  // Ranking base por tipo + boost fuerte a exactos
+  // Ranking base + boost a exactos
   const scoreKind = (k) =>
     k === "asset"
       ? 100
@@ -365,7 +468,7 @@ export const globalSearch = asyncHandler(async (req, res) => {
       ? 50
       : k === "reporte"
       ? 45
-      : 30;
+      : /* soporte & otros */ 40;
 
   const allRaw = [
     ...activos,
@@ -378,8 +481,10 @@ export const globalSearch = asyncHandler(async (req, res) => {
     ...estacionamientos,
     ...registros,
     ...salesOrders,
-    ...faqs,
-    ...tutorials,
+    ...faqsPub,
+    ...tutorialsPub,
+    ...changelogsPub,
+    ...statusPub,
   ];
 
   const ranked = allRaw
@@ -391,7 +496,6 @@ export const globalSearch = asyncHandler(async (req, res) => {
     .slice(0, limit)
     .map(({ _score, ...r }) => r);
 
-  // caché off (resultados dependen de permisos del front, etc.)
   res.set("Cache-Control", "private, max-age=0, no-store");
   res.json(ranked);
 });
