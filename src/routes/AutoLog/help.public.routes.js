@@ -23,7 +23,7 @@ const router = Router();
 /** FAQs */
 router.get("/help/faqs", listFaqs);
 router.get("/help/faqs/:slug", getFaqBySlug);
-router.post("/help/faqs/:id/helpful", voteFaqHelpful); // sin auth; puedes rate-limit
+router.post("/help/faqs/:id/helpful", voteFaqHelpful);
 
 /** Tutorials */
 router.get("/help/tutorials", listTutorials);
@@ -34,8 +34,10 @@ router.get("/help/status/overall", getOverallStatus);
 router.get("/help/status/services", listServices);
 
 /** Changelogs */
-router.get("/help/changelogs", listChangelogs);
-router.get("/help/changelogs/:slug", getChangelogBySlug);
+// 👇 primero las rutas fijas
 router.get("/help/changelogs/pinned", getPinnedChangelogs);
+// 👇 luego la paramétrica
+router.get("/help/changelogs/:slug", getChangelogBySlug);
+router.get("/help/changelogs", listChangelogs);
 
 export default router;
