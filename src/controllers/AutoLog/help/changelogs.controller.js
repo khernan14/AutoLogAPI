@@ -291,3 +291,32 @@ export const deleteChangelog = asyncHandler(async (req, res) => {
     return res.status(404).json({ message: "Changelog no encontrado" });
   res.status(204).end();
 });
+
+export const getPinnedChangelogs = asyncHandler(async (req, res) => {
+  const n = parseInt(req.query.limit, 10);
+  const limit = Number.isFinite(n) ? Math.min(Math.max(n, 1), 12) : 6;
+
+  // 1) pinned primero
+  const [pinned] = await pool.query(
+    `SELECT id, slug, title, type, DATE_FORMAT(date, '%Y-%m-%d') AS day
+     FROM changelogs
+     WHERE pinned = 1
+     ORDER BY date DESC
+     LIMIT ?`,
+    [limit]
+  );
+
+  if (pinned.length > 0) {
+    return res.json(pinned);
+  }
+
+  // 2) fallback: últimas (no pinned)
+  const [latest] = await pool.query(
+    `SELECT id, slug, title, type, DATE_FORMAT(date, '%Y-%m-%d') AS day
+     FROM changelogs
+     ORDER BY date DESC
+     LIMIT ?`,
+    [limit]
+  );
+  return res.json(latest);
+});

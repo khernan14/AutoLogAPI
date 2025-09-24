@@ -15,6 +15,7 @@ import {
 import {
   listChangelogs,
   getChangelogBySlug,
+  getPinnedChangelogs,
 } from "../../controllers/AutoLog/help/changelogs.controller.js";
 
 const router = Router();
@@ -35,5 +36,6 @@ router.get("/help/status/services", listServices);
 /** Changelogs */
 router.get("/help/changelogs", listChangelogs);
 router.get("/help/changelogs/:slug", getChangelogBySlug);
+router.get("/help/changelogs/pinned", getPinnedChangelogs);
 
 export default router;
