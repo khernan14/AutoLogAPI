@@ -56,12 +56,20 @@ const app = express();
 app.use(
   cors({
     origin: "*", // o especifica tu dominio por seguridad
+    credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "Idempotency-Key",
+      "idempotency-key",
+    ],
+    exposedHeaders: ["Idempotency-Key", "idempotency-key"],
   })
 );
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.options("*", cors());
 
 const uploadsPath = path.join(__dirname, "src", "uploads");
 
