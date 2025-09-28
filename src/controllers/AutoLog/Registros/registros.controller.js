@@ -1,4 +1,6 @@
 import pool from "../../../config/connectionToSql.js";
+import NotificationConfigService from "../../../services/notifications/NotificationConfigService.js";
+import NotificationService from "../../../services/notifications/NotificationService.js";
 
 // 📌 Obtener registro activo del empleado
 export const obtenerRegistroPendienteEmpleado = async (req, res) => {
@@ -88,8 +90,6 @@ export const obtenerCombustibleActual = async (req, res) => {
       .json({ error: "Error interno del servidor.", details: error.message });
   }
 };
-
-// 🚗 Registrar la salida de un vehículo
 // export const registrarSalida = async (req, res) => {
 //   const {
 //     id_empleado,
@@ -209,6 +209,69 @@ export const registrarSalida = async (req, res) => {
 
     await conn.commit();
 
+    // === Notificación post-commit (no rompe la respuesta si falla) ===
+    try {
+      // ¿Está activo el evento en Settings?
+      const enabled = await NotificationConfigService.isEnabled(
+        "VEHICULO_SALIDA"
+      );
+      if (enabled) {
+        // Traer datos para el template (employeeName, vehicleName, supervisorName)
+        const [[info]] = await conn.query(
+          `SELECT 
+             u.nombre  AS employeeName,
+             v.placa   AS vehicleName,
+             su.nombre AS supervisorName
+           FROM empleados e
+           JOIN usuarios u       ON u.id_usuario = e.id_usuario
+           LEFT JOIN empleados s ON s.id = e.supervisor_id
+           LEFT JOIN usuarios su ON su.id_usuario = s.id_usuario
+           JOIN vehiculos v      ON v.id = ?
+           WHERE e.id = ?
+           LIMIT 1`,
+          [id_vehiculo, id_empleado]
+        );
+
+        const tz = "America/Tegucigalpa";
+        const fecha = new Date(fecha_salida).toLocaleDateString("es-HN", {
+          timeZone: tz,
+        });
+        const hora = new Date(fecha_salida).toLocaleTimeString("es-HN", {
+          timeZone: tz,
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
+        });
+
+        // Disparar notificación (usa tu motor nuevo; plantillas de disco)
+        await NotificationService.createAndSend({
+          clave: "VEHICULO_SALIDA",
+          payload: {
+            // claves que usa tu template notificationSalida.html:
+            employeeName: info?.employeeName || "",
+            vehicleName: info?.vehicleName || "",
+            supervisorName: info?.supervisorName || "",
+            fecha,
+            hora,
+            // meta útil para logs/links
+            registroId: insertId,
+            vehiculo_id: id_vehiculo,
+            empleado_id: id_empleado,
+            link_detalle: `${
+              process.env.APP_URL || ""
+            }/vehiculos/registros/${insertId}`,
+          },
+          creado_por: req.user?.id_usuario || null,
+        });
+      }
+    } catch (notifErr) {
+      console.error(
+        "⚠️ Notificación de SALIDA falló:",
+        notifErr?.message || notifErr
+      );
+      // no hacemos throw: la creación del registro fue exitosa
+    }
+
     res.status(201).json({
       message: "Registro de salida y subida de imágenes exitosos.",
       id_registro: insertId,
@@ -224,8 +287,6 @@ export const registrarSalida = async (req, res) => {
     conn.release();
   }
 };
-
-// 🚗 Registrar el regreso de un vehículo
 // export const registrarRegreso = async (req, res) => {
 //   const {
 //     id_registro,
@@ -348,6 +409,72 @@ export const registrarRegreso = async (req, res) => {
     }
 
     await conn.commit();
+
+    // === Notificación post-commit (no rompe la respuesta si falla) ===
+    try {
+      const enabled = await NotificationConfigService.isEnabled(
+        "VEHICULO_REGRESO"
+      );
+      if (enabled) {
+        // Obtener placa desde el registro y nombres desde empleado/supervisor
+        const [[veh]] = await conn.query(
+          `SELECT v.placa AS vehicleName
+           FROM registros r 
+           JOIN vehiculos v ON v.id = r.id_vehiculo
+           WHERE r.id = ?
+           LIMIT 1`,
+          [id_registro]
+        );
+
+        const [[info]] = await conn.query(
+          `SELECT 
+             u.nombre  AS employeeName,
+             su.nombre AS supervisorName
+           FROM empleados e
+           JOIN usuarios u       ON u.id_usuario = e.id_usuario
+           LEFT JOIN empleados s ON s.id = e.supervisor_id
+           LEFT JOIN usuarios su ON su.id_usuario = s.id_usuario
+           WHERE e.id = ?
+           LIMIT 1`,
+          [id_empleado]
+        );
+
+        const tz = "America/Tegucigalpa";
+        const fecha = new Date(fecha_regreso).toLocaleDateString("es-HN", {
+          timeZone: tz,
+        });
+        const hora = new Date(fecha_regreso).toLocaleTimeString("es-HN", {
+          timeZone: tz,
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
+        });
+
+        await NotificationService.createAndSend({
+          clave: "VEHICULO_REGRESO",
+          payload: {
+            // Si usas un template de regreso con las mismas claves, mantén estos nombres
+            employeeName: info?.employeeName || "",
+            vehicleName: veh?.vehicleName || "",
+            supervisorName: info?.supervisorName || "",
+            fecha,
+            hora,
+            registroId: id_registro,
+            vehiculo_id: veh?.vehiculo_id || null,
+            empleado_id: id_empleado,
+            link_detalle: `${
+              process.env.APP_URL || ""
+            }/vehiculos/registros/${id_registro}`,
+          },
+          creado_por: req.user?.id_usuario || null,
+        });
+      }
+    } catch (notifErr) {
+      console.error(
+        "⚠️ Notificación de REGRESO falló:",
+        notifErr?.message || notifErr
+      );
+    }
 
     res.status(200).json({
       message: "Registro de regreso y subida de imágenes exitosos.",

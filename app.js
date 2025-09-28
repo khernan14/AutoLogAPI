@@ -13,7 +13,7 @@ import citiesRoutes from "./src/routes/AutoLog/cities.routes.js";
 import parkingRoutes from "./src/routes/AutoLog/parking.routes.js";
 import permisosRoutes from "./src/routes/AutoLog/permisos.routes.js";
 import mailRoutes from "./src/routes/AutoLog/mail.routes.js";
-import gruposRoutes from "./src/routes/AutoLog/grupos.routes.js";
+// import gruposRoutes from "./src/routes/AutoLog/grupos.routes.js";
 import grupoUsuariosRoutes from "./src/routes/AutoLog/grupoUsuarios.routes.js";
 import registerReportRoutes from "./src/routes/AutoLog/registerReport.routes.js";
 // import helpRoutes from "./src/routes/AutoLog/help.routes.js";
@@ -35,6 +35,13 @@ import salesOrdersRoutes from "./src/routes/Inventario/salesOrders.routes.js";
 import salesOrdersActivosRoutes from "./src/routes/Inventario/salesOrdersActivos.routes.js";
 import publicActivosRoutes from "./src/routes/Public/publicActivos.routes.js";
 
+//Notificaciones
+import notificacionesRoutes from "./src/routes/Notificaciones/notificaciones.routes.js";
+import configRoutes from "./src/routes/Notificaciones/config.routes.js";
+import plantillasRoutes from "./src/routes/Notificaciones/plantillas.routes.js";
+import gruposRoutes from "./src/routes/Notificaciones/grupos.routes.js";
+import eventosRoutes from "./src/routes/Notificaciones/eventos.routes.js";
+
 import path from "path";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
@@ -52,24 +59,42 @@ const __dirname = dirname(__filename);
 
 const app = express();
 
+const ALLOWED_ORIGINS = [
+  "http://localhost:5173", // Vite (común)
+  "http://127.0.0.1:5173",
+  "http://localhost:5174", // si usas otro port de Vite
+  "http://localhost:3000", // si sirves el front en 3000
+];
+
 // Middlewares
 app.use(
   cors({
-    origin: "*", // o especifica tu dominio por seguridad
+    origin(origin, cb) {
+      if (!origin) return cb(null, true); // permite curl, Postman y mismas peticiones internas
+      if (ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
+      return cb(null, false); // <— NO lances error: evita 500 y deja que el browser bloquee
+    },
     credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: [
       "Content-Type",
       "Authorization",
-      "Idempotency-Key",
       "idempotency-key",
+      "Idempotency-Key",
+      "X-Requested-With",
     ],
-    exposedHeaders: ["Idempotency-Key", "idempotency-key"],
   })
 );
+
+// Responder preflight ANTES de auth y rutas
+app.options("*", cors());
+app.use((req, res, next) => {
+  if (req.method === "OPTIONS") return res.sendStatus(204);
+  next();
+});
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.options("*", cors());
 
 const uploadsPath = path.join(__dirname, "src", "uploads");
 
@@ -104,7 +129,7 @@ app.use("/api/cities", citiesRoutes);
 app.use("/api/parkings", parkingRoutes);
 app.use("/api/permisos", permisosRoutes);
 app.use("/api/mail", mailRoutes);
-app.use("/api/grupos", gruposRoutes);
+// app.use("/api/grupos", gruposRoutes);
 app.use("/api/grupo-usuarios", grupoUsuariosRoutes);
 app.use("/api/reports", registerReportRoutes);
 // app.use("/api/help", helpRoutes);
@@ -125,6 +150,13 @@ app.use("/api/inventario/contratos-activos", contratosActivosRoutes);
 app.use("/api/inventario/sales-orders", salesOrdersRoutes);
 app.use("/api/inventario/sales-orders/lineas", salesOrdersActivosRoutes);
 app.use("/public", publicActivosRoutes);
+
+//Notificaciones
+app.use("/api/notifications", notificacionesRoutes);
+app.use("/api/notifications/config", configRoutes);
+app.use("/api/notificaciones/grupos", gruposRoutes);
+app.use("/api/notificaciones/plantillas", plantillasRoutes);
+app.use("/api/notificaciones/eventos", eventosRoutes);
 
 // Middleware de manejo de errores de multer
 app.use((err, req, res, next) => {
