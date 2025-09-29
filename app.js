@@ -60,41 +60,49 @@ const __dirname = dirname(__filename);
 const app = express();
 
 const ALLOWED_ORIGINS = [
-  "http://localhost:5173", // Vite (común)
+  "http://localhost:5173",
   "http://127.0.0.1:5173",
-  "http://localhost:5174", // si usas otro port de Vite
-  "http://localhost:3000", // si sirves el front en 3000
+  "http://localhost:3000",
+  "https://herndevs.com",
+  "https://www.herndevs.com",
 ];
 
 // Middlewares
-app.use(
-  cors({
-    origin(origin, cb) {
-      if (!origin) return cb(null, true); // permite curl, Postman y mismas peticiones internas
-      if (ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
-      return cb(null, false); // <— NO lances error: evita 500 y deja que el browser bloquee
-    },
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: [
-      "Content-Type",
-      "Authorization",
-      "idempotency-key",
-      "Idempotency-Key",
-      "X-Requested-With",
-    ],
-  })
-);
+const corsOptions = {
+  origin(origin, cb) {
+    // Permite curl/Postman (sin Origin)
+    if (!origin) return cb(null, true);
+    if (ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
+    return cb(new Error("Not allowed by CORS: " + origin));
+  },
+  credentials: true, // si NO usas cookies, puedes poner false
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: [
+    "Content-Type",
+    "Authorization",
+    "Idempotency-Key",
+    "idempotency-key",
+    "X-Requested-With",
+  ],
+};
 
-// Responder preflight ANTES de auth y rutas
-app.options("*", cors());
-app.use((req, res, next) => {
-  if (req.method === "OPTIONS") return res.sendStatus(204);
-  next();
-});
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+app.use((req, _res, next) => {
+  if (req.headers.origin) {
+    console.log(
+      "[CORS] %s %s Origin=%s",
+      req.method,
+      req.path,
+      req.headers.origin
+    );
+  }
+  next();
+});
 
 const uploadsPath = path.join(__dirname, "src", "uploads");
 
