@@ -1,13 +1,35 @@
+// controllers/AutoLog/registros.controller.js
 import pool from "../../../config/connectionToSql.js";
+import logger from "../../../utils/logger.js";
 
-/**
- * @desc Obtiene todos los registros de uso de vehículos con detalles de empleado, vehículo, ubicaciones e imágenes.
- * @route GET /api/registros
- * @access Public
- */
+const toInt = (v) => {
+  const n = Number(v);
+  return Number.isInteger(n) ? n : NaN;
+};
+
+// ---------------------------------------------
+// GET /api/registros  (opcional: ?limit=&offset=)
+// ---------------------------------------------
 export const getRegistros = async (req, res) => {
   try {
-    const [rows] = await pool.query(`
+    // Paginación opcional (no rompe si no la usas)
+    const hasLimit = req.query.limit !== undefined;
+    const hasOffset = req.query.offset !== undefined;
+    const limit = hasLimit
+      ? Math.min(Math.max(toInt(req.query.limit), 1), 500)
+      : null;
+    const offset = hasOffset ? Math.max(toInt(req.query.offset), 0) : null;
+
+    if (
+      (hasLimit && Number.isNaN(limit)) ||
+      (hasOffset && Number.isNaN(offset))
+    ) {
+      return res
+        .status(400)
+        .json({ error: "Parámetros de paginación inválidos" });
+    }
+
+    let sql = `
       SELECT
         r.id,
         r.km_salida,
@@ -46,8 +68,20 @@ export const getRegistros = async (req, res) => {
       LEFT JOIN registro_images ri ON r.id = ri.id_registro
       LEFT JOIN images i ON ri.id_image = i.id_image
       GROUP BY r.id
-      ORDER BY r.fecha_salida DESC;
-    `);
+      ORDER BY r.fecha_salida DESC
+    `;
+    const params = [];
+
+    if (limit != null) {
+      sql += ` LIMIT ?`;
+      params.push(limit);
+      if (offset != null) {
+        sql += ` OFFSET ?`;
+        params.push(offset);
+      }
+    }
+
+    const [rows] = await pool.execute(sql, params);
 
     const registros = rows.map((row) => ({
       id: row.id,
@@ -77,271 +111,225 @@ export const getRegistros = async (req, res) => {
         try {
           return row.images_json ? JSON.parse(row.images_json) : [];
         } catch (err) {
-          console.error("❌ Error al parsear images_json:", err);
+          logger.warn({ err }, "Error al parsear images_json");
           return [];
         }
       })(),
     }));
 
-    res.json(registros);
-  } catch (error) {
-    console.error("Error al obtener los registros:", error);
-    res.status(500).json({ error: error.message });
+    return res.json(registros);
+  } catch (err) {
+    logger.error({ err }, "getRegistros failed");
+    return res.status(500).json({ error: "Error interno del servidor." });
   }
 };
 
-/**
- * @desc Obtiene el reporte de empleados con más salidas de vehículos.
- * @route GET /api/reportes/empleados-mas-salidas
- * @access Public
- */
-export const getReporteEmpleadosMasSalidas = async (req, res) => {
+// --------------------------------------------------------------
+// GET /api/reportes/empleados-mas-salidas
+// --------------------------------------------------------------
+export const getReporteEmpleadosMasSalidas = async (_req, res) => {
   try {
-    const [rows] = await pool.query(`
+    const [rows] = await pool.execute(`
       SELECT
-          u.nombre AS nombre_empleado,
-          e.puesto,
-          COUNT(r.id) AS total_salidas
-      FROM
-          empleados e
-      JOIN
-          usuarios u ON e.id_usuario = u.id_usuario
-      LEFT JOIN
-          registros r ON e.id = r.id_empleado
+        u.nombre AS nombre_empleado,
+        e.puesto,
+        COUNT(r.id) AS total_salidas
+      FROM empleados e
+      JOIN usuarios u ON e.id_usuario = u.id_usuario
+      LEFT JOIN registros r ON e.id = r.id_empleado
       WHERE u.rol != 'Admin'
-      GROUP BY
-          u.nombre, e.puesto
-      ORDER BY
-          total_salidas DESC;
+      GROUP BY u.nombre, e.puesto
+      ORDER BY total_salidas DESC
     `);
-    res.json(rows);
-  } catch (error) {
-    console.error(
-      "Error al obtener el reporte de empleados con más salidas:",
-      error
-    );
-    res.status(500).json({ error: error.message });
+    return res.json(rows);
+  } catch (err) {
+    logger.error({ err }, "getReporteEmpleadosMasSalidas failed");
+    return res.status(500).json({ error: "Error interno del servidor." });
   }
 };
 
-/**
- * @desc Obtiene el reporte de kilometraje total recorrido por cada empleado.
- * @route GET /api/reportes/kilometraje-por-empleado
- * @access Public
- */
-export const getReporteKilometrajePorEmpleado = async (req, res) => {
+// --------------------------------------------------------------
+// GET /api/reportes/kilometraje-por-empleado
+// --------------------------------------------------------------
+export const getReporteKilometrajePorEmpleado = async (_req, res) => {
   try {
-    const [rows] = await pool.query(`
+    const [rows] = await pool.execute(`
       SELECT
-          u.nombre AS nombre_empleado,
-          e.puesto,
-          SUM(CASE WHEN r.km_regreso IS NOT NULL AND r.km_salida IS NOT NULL AND r.km_regreso >= r.km_salida THEN (r.km_regreso - r.km_salida) ELSE 0 END) AS kilometraje_total_recorrido
-      FROM
-          empleados e
-      JOIN
-          usuarios u ON e.id_usuario = u.id_usuario
-      LEFT JOIN
-          registros r ON e.id = r.id_empleado
+        u.nombre AS nombre_empleado,
+        e.puesto,
+        SUM(
+          CASE
+            WHEN r.km_regreso IS NOT NULL
+             AND r.km_salida IS NOT NULL
+             AND r.km_regreso >= r.km_salida
+            THEN (r.km_regreso - r.km_salida)
+            ELSE 0
+          END
+        ) AS kilometraje_total_recorrido
+      FROM empleados e
+      JOIN usuarios u ON e.id_usuario = u.id_usuario
+      LEFT JOIN registros r ON e.id = r.id_empleado
       WHERE u.rol != 'Admin'
-      GROUP BY
-          u.nombre, e.puesto
-      ORDER BY
-          kilometraje_total_recorrido DESC;
+      GROUP BY u.nombre, e.puesto
+      ORDER BY kilometraje_total_recorrido DESC
     `);
-    res.json(rows);
-  } catch (error) {
-    console.error(
-      "Error al obtener el reporte de kilometraje por empleado:",
-      error
-    );
-    res.status(500).json({ error: error.message });
+    return res.json(rows);
+  } catch (err) {
+    logger.error({ err }, "getReporteKilometrajePorEmpleado failed");
+    return res.status(500).json({ error: "Error interno del servidor." });
   }
 };
 
-/**
- * @desc Obtiene el reporte de los vehículos más utilizados.
- * @route GET /api/reportes/vehiculos-mas-utilizados
- * @access Public
- */
-export const getReporteVehiculosMasUtilizados = async (req, res) => {
+// --------------------------------------------------------------
+// GET /api/reportes/vehiculos-mas-utilizados
+// --------------------------------------------------------------
+export const getReporteVehiculosMasUtilizados = async (_req, res) => {
   try {
-    const [rows] = await pool.query(`
+    const [rows] = await pool.execute(`
       SELECT
-          v.marca,
-          v.modelo,
-          v.placa,
-          COUNT(r.id) AS total_usos
-      FROM
-          vehiculos v
-      JOIN
-          registros r ON v.id = r.id_vehiculo
-      GROUP BY
-          v.marca, v.modelo, v.placa
-      ORDER BY
-          total_usos DESC;
+        v.marca,
+        v.modelo,
+        v.placa,
+        COUNT(r.id) AS total_usos
+      FROM vehiculos v
+      JOIN registros r ON v.id = r.id_vehiculo
+      GROUP BY v.marca, v.modelo, v.placa
+      ORDER BY total_usos DESC
     `);
-    res.json(rows);
-  } catch (error) {
-    console.error(
-      "Error al obtener el reporte de vehículos más utilizados:",
-      error
-    );
-    res.status(500).json({ error: error.message });
+    return res.json(rows);
+  } catch (err) {
+    logger.error({ err }, "getReporteVehiculosMasUtilizados failed");
+    return res.status(500).json({ error: "Error interno del servidor." });
   }
 };
 
-/**
- * @desc Obtiene el reporte de registros de uso de vehículos por ubicación.
- * @route GET /api/reportes/registros-por-ubicacion
- * @access Public
- */
-export const getReporteRegistrosPorUbicacion = async (req, res) => {
+// --------------------------------------------------------------
+// GET /api/reportes/registros-por-ubicacion
+// --------------------------------------------------------------
+export const getReporteRegistrosPorUbicacion = async (_req, res) => {
   try {
-    const [rows] = await pool.query(`
+    const [rows] = await pool.execute(`
       SELECT
-          u.nombre AS nombre_empleado,
-          CONCAT(v.marca, ' ', v.modelo, ' (', v.placa, ')') AS vehiculo,
-          es.nombre_ubicacion AS ubicacion_salida,
-          er.nombre_ubicacion AS ubicacion_regreso,
-          r.fecha_salida,
-          r.fecha_regreso,
-          r.km_salida,
-          r.km_regreso
-      FROM
-          registros r
-      JOIN
-          empleados e ON r.id_empleado = e.id
-      JOIN
-          usuarios u ON e.id_usuario = u.id_usuario
-      JOIN
-          vehiculos v ON r.id_vehiculo = v.id
-      LEFT JOIN
-          estacionamientos es ON r.id_ubicacion_salida = es.id
-      LEFT JOIN
-          estacionamientos er ON r.id_ubicacion_regreso = er.id
+        u.nombre AS nombre_empleado,
+        CONCAT(v.marca, ' ', v.modelo, ' (', v.placa, ')') AS vehiculo,
+        es.nombre_ubicacion AS ubicacion_salida,
+        er.nombre_ubicacion AS ubicacion_regreso,
+        r.fecha_salida,
+        r.fecha_regreso,
+        r.km_salida,
+        r.km_regreso
+      FROM registros r
+      JOIN empleados e ON r.id_empleado = e.id
+      JOIN usuarios u ON e.id_usuario = u.id_usuario
+      JOIN vehiculos v ON r.id_vehiculo = v.id
+      LEFT JOIN estacionamientos es ON r.id_ubicacion_salida = es.id
+      LEFT JOIN estacionamientos er ON r.id_ubicacion_regreso = er.id
       WHERE u.rol != 'Admin'
-      ORDER BY
-          r.fecha_salida DESC;
+      ORDER BY r.fecha_salida DESC
     `);
-    res.json(rows);
-  } catch (error) {
-    console.error(
-      "Error al obtener el reporte de registros por ubicación:",
-      error
-    );
-    res.status(500).json({ error: error.message });
+    return res.json(rows);
+  } catch (err) {
+    logger.error({ err }, "getReporteRegistrosPorUbicacion failed");
+    return res.status(500).json({ error: "Error interno del servidor." });
   }
 };
 
-/**
- * @desc Obtiene el reporte de consumo promedio de combustible por vehículo.
- * @route GET /api/reportes/consumo-combustible-vehiculo
- * @access Public
- */
-export const getReporteConsumoCombustibleVehiculo = async (req, res) => {
+// --------------------------------------------------------------
+// GET /api/reportes/consumo-combustible-vehiculo
+// --------------------------------------------------------------
+export const getReporteConsumoCombustibleVehiculo = async (_req, res) => {
   try {
-    const [rows] = await pool.query(`
+    const [rows] = await pool.execute(`
       SELECT
-          v.marca,
-          v.modelo,
-          v.placa,
-          AVG(CASE
-              WHEN r.combustible_salida IS NOT NULL AND r.combustible_regreso IS NOT NULL AND r.combustible_salida >= r.combustible_regreso
-              THEN (r.combustible_salida - r.combustible_regreso)
-              ELSE NULL
-          END) AS promedio_consumo_porcentaje
-      FROM
-          vehiculos v
-      JOIN
-          registros r ON v.id = r.id_vehiculo
-      WHERE
-          r.combustible_salida IS NOT NULL AND r.combustible_regreso IS NOT NULL
-      GROUP BY
-          v.marca, v.modelo, v.placa
-      ORDER BY
-          promedio_consumo_porcentaje DESC;
+        v.marca,
+        v.modelo,
+        v.placa,
+        AVG(
+          CASE
+            WHEN r.combustible_salida IS NOT NULL
+             AND r.combustible_regreso IS NOT NULL
+             AND r.combustible_salida >= r.combustible_regreso
+            THEN (r.combustible_salida - r.combustible_regreso)
+            ELSE NULL
+          END
+        ) AS promedio_consumo_porcentaje
+      FROM vehiculos v
+      JOIN registros r ON v.id = r.id_vehiculo
+      WHERE r.combustible_salida IS NOT NULL
+        AND r.combustible_regreso IS NOT NULL
+      GROUP BY v.marca, v.modelo, v.placa
+      ORDER BY promedio_consumo_porcentaje DESC
     `);
-    res.json(rows);
-  } catch (error) {
-    console.error(
-      "Error al obtener el reporte de consumo de combustible por vehículo:",
-      error
-    );
-    res.status(500).json({ error: error.message });
+    return res.json(rows);
+  } catch (err) {
+    logger.error({ err }, "getReporteConsumoCombustibleVehiculo failed");
+    return res.status(500).json({ error: "Error interno del servidor." });
   }
 };
 
-// --- Nuevos Controladores para Métricas del Dashboard Home ---
-
-/**
- * @desc Obtiene el total de empleados (activos).
- * @route GET /api/reportes/total-empleados
- * @access Public
- */
-export const getTotalEmpleados = async (req, res) => {
+// --------------------------------------------------------------
+// GET /api/reportes/total-empleados
+// --------------------------------------------------------------
+export const getTotalEmpleados = async (_req, res) => {
   try {
-    const [rows] = await pool.query(`
+    const [rows] = await pool.execute(`
       SELECT COUNT(id_usuario) AS total
       FROM usuarios
-      WHERE estatus = 'Activo' AND rol != 'Admin';
+      WHERE estatus = 'Activo' AND rol != 'Admin'
     `);
-    res.json(rows[0] || { total: 0 }); // Retorna el primer resultado o un objeto con total 0
-  } catch (error) {
-    console.error("Error al obtener el total de empleados:", error);
-    res.status(500).json({ error: error.message });
+    return res.json(rows[0] || { total: 0 });
+  } catch (err) {
+    logger.error({ err }, "getTotalEmpleados failed");
+    return res.status(500).json({ error: "Error interno del servidor." });
   }
 };
 
-/**
- * @desc Obtiene el total de vehículos.
- * @route GET /api/reportes/total-vehiculos
- * @access Public
- */
-export const getTotalVehiculos = async (req, res) => {
+// --------------------------------------------------------------
+// GET /api/reportes/total-vehiculos
+// --------------------------------------------------------------
+export const getTotalVehiculos = async (_req, res) => {
   try {
-    const [rows] = await pool.query(`
-      SELECT COUNT(id) AS total FROM vehiculos;
+    const [rows] = await pool.execute(`
+      SELECT COUNT(id) AS total
+      FROM vehiculos
     `);
-    res.json(rows[0] || { total: 0 });
-  } catch (error) {
-    console.error("Error al obtener el total de vehículos:", error);
-    res.status(500).json({ error: error.message });
+    return res.json(rows[0] || { total: 0 });
+  } catch (err) {
+    logger.error({ err }, "getTotalVehiculos failed");
+    return res.status(500).json({ error: "Error interno del servidor." });
   }
 };
 
-/**
- * @desc Obtiene el total de vehículos actualmente en uso.
- * Un vehículo está en uso si tiene un registro de salida sin fecha de regreso.
- * @route GET /api/reportes/vehiculos-en-uso
- * @access Public
- */
-export const getVehiculosEnUso = async (req, res) => {
+// --------------------------------------------------------------
+// GET /api/reportes/vehiculos-en-uso
+// --------------------------------------------------------------
+export const getVehiculosEnUso = async (_req, res) => {
   try {
-    const [rows] = await pool.query(`
+    const [rows] = await pool.execute(`
       SELECT COUNT(DISTINCT id_vehiculo) AS total
       FROM registros
-      WHERE fecha_regreso IS NULL;
+      WHERE fecha_regreso IS NULL
     `);
-    res.json(rows[0] || { total: 0 });
-  } catch (error) {
-    console.error("Error al obtener vehículos en uso:", error);
-    res.status(500).json({ error: error.message });
+    return res.json(rows[0] || { total: 0 });
+  } catch (err) {
+    logger.error({ err }, "getVehiculosEnUso failed");
+    return res.status(500).json({ error: "Error interno del servidor." });
   }
 };
 
-/**
- * @desc Obtiene el total de vehículos en mantenimiento.
- * @route GET /api/reportes/vehiculos-en-mantenimiento
- * @access Public
- */
-export const getVehiculosEnMantenimiento = async (req, res) => {
+// --------------------------------------------------------------
+// GET /api/reportes/vehiculos-en-mantenimiento
+// --------------------------------------------------------------
+export const getVehiculosEnMantenimiento = async (_req, res) => {
   try {
-    const [rows] = await pool.query(`
-      SELECT COUNT(id) AS total FROM vehiculos WHERE estado = 'En Mantenimiento';
+    const [rows] = await pool.execute(`
+      SELECT COUNT(id) AS total
+      FROM vehiculos
+      WHERE estado = 'En Mantenimiento'
     `);
-    res.json(rows[0] || { total: 0 });
-  } catch (error) {
-    console.error("Error al obtener vehículos en mantenimiento:", error);
-    res.status(500).json({ error: error.message });
+    return res.json(rows[0] || { total: 0 });
+  } catch (err) {
+    logger.error({ err }, "getVehiculosEnMantenimiento failed");
+    return res.status(500).json({ error: "Error interno del servidor." });
   }
 };

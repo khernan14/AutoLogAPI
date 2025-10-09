@@ -1,7 +1,9 @@
+// app.js
 import express from "express";
 import cors from "cors";
 import "dotenv/config";
-import pool from "./src/config/connectionToSql.js"; // ajusta la ruta si difiere
+import pool from "./src/config/connectionToSql.js";
+
 import authRoutes from "./src/routes/AutoLog/auth.routes.js";
 import empleadosRoutes from "./src/routes/AutoLog/empleados.routes.js";
 import vehiculosRoutes from "./src/routes/AutoLog/vehiculos.routes.js";
@@ -13,15 +15,13 @@ import citiesRoutes from "./src/routes/AutoLog/cities.routes.js";
 import parkingRoutes from "./src/routes/AutoLog/parking.routes.js";
 import permisosRoutes from "./src/routes/AutoLog/permisos.routes.js";
 import mailRoutes from "./src/routes/AutoLog/mail.routes.js";
-// import gruposRoutes from "./src/routes/AutoLog/grupos.routes.js";
 import grupoUsuariosRoutes from "./src/routes/AutoLog/grupoUsuarios.routes.js";
 import registerReportRoutes from "./src/routes/AutoLog/registerReport.routes.js";
-// import helpRoutes from "./src/routes/AutoLog/help.routes.js";
 import helpPublicRoutes from "./src/routes/AutoLog/help.public.routes.js";
 import helpAdminRoutes from "./src/routes/AutoLog/help.admin.routes.js";
 import searchRoutes from "./src/routes/AutoLog/search.routes.js";
 
-//rutas de Inventario
+// Inventario
 import clientesRoutes from "./src/routes/Inventario/clientes.routes.js";
 import siteRoutes from "./src/routes/Inventario/sites.routes.js";
 import bodegasRoutes from "./src/routes/Inventario/bodega.routes.js";
@@ -35,7 +35,7 @@ import salesOrdersRoutes from "./src/routes/Inventario/salesOrders.routes.js";
 import salesOrdersActivosRoutes from "./src/routes/Inventario/salesOrdersActivos.routes.js";
 import publicActivosRoutes from "./src/routes/Public/publicActivos.routes.js";
 
-//Notificaciones
+// Notificaciones
 import notificacionesRoutes from "./src/routes/Notificaciones/notificaciones.routes.js";
 import configRoutes from "./src/routes/Notificaciones/config.routes.js";
 import plantillasRoutes from "./src/routes/Notificaciones/plantillas.routes.js";
@@ -52,10 +52,12 @@ import {
   swaggerCustomOptions,
 } from "./src/config/swagger.js";
 
+// 🔹 Logger y middleware de request
+import logger from "./src/utils/logger.js";
+import { requestLogger } from "./src/middleware/request-logger.js";
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-
-// Servir carpeta de imágenes
 
 const app = express();
 
@@ -67,15 +69,14 @@ const ALLOWED_ORIGINS = [
   "https://www.herndevs.com",
 ];
 
-// Middlewares
+// CORS
 const corsOptions = {
   origin(origin, cb) {
-    // Permite curl/Postman (sin Origin)
-    if (!origin) return cb(null, true);
+    if (!origin) return cb(null, true); // curl/Postman sin Origin
     if (ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
     return cb(new Error("Not allowed by CORS: " + origin));
   },
-  credentials: true, // si NO usas cookies, puedes poner false
+  credentials: true,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   allowedHeaders: [
     "Content-Type",
@@ -89,43 +90,55 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.options("*", cors(corsOptions));
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// Body parsers (con límite)
+app.use(express.json({ limit: "20kb" }));
+app.use(express.urlencoded({ extended: true, limit: "20kb" }));
 
+// 🔹 Log de cada request/respuesta
+app.use(requestLogger);
+
+// (Opcional) Log de origen CORS para depurar
 app.use((req, _res, next) => {
   if (req.headers.origin) {
-    console.log(
-      "[CORS] %s %s Origin=%s",
-      req.method,
-      req.path,
-      req.headers.origin
+    logger.debug(
+      { method: req.method, path: req.path, origin: req.headers.origin },
+      "[CORS]"
     );
   }
   next();
 });
 
-const uploadsPath = path.join(__dirname, "src", "uploads");
+// Manejo de JSON malformado (syntax error del body parser)
+app.use((err, req, res, next) => {
+  if (err instanceof SyntaxError && "body" in err) {
+    logger.warn({ err }, "JSON inválido en request");
+    return res.status(400).json({ error: "Solicitud inválida (JSON)" });
+  }
+  return next(err);
+});
 
-// Swagger UI (para documentación)
+// Archivos estáticos
+const uploadsPath = path.join(__dirname, "src", "uploads");
+app.use("/uploads", express.static(uploadsPath));
+
+// Swagger
 app.use(
   "/api-docs",
   swaggerUi.serve,
   swaggerUi.setup(swaggerSpec, swaggerCustomOptions)
 );
 
-app.get("/health", async (req, res) => {
+// Healthcheck
+app.get("/health", async (_req, res) => {
   try {
-    // Ping super rápido a la DB (opcional)
     await pool.query("SELECT 1");
-    res.status(200).json({ ok: true, db: "up" });
-  } catch (e) {
-    // Si tu DB tarda en levantar, puedes devolver 200 igualmente para no matar el contenedor
-    res.status(500).json({ ok: false, db: "down" });
+    return res.status(200).json({ ok: true, db: "up" });
+  } catch {
+    return res.status(500).json({ ok: false, db: "down" });
   }
 });
 
-// Routes
-app.use("/uploads", express.static(uploadsPath));
+// Rutas
 app.use("/api/auth", authRoutes);
 app.use("/api/empleados", empleadosRoutes);
 app.use("/api/vehiculos", vehiculosRoutes);
@@ -137,15 +150,13 @@ app.use("/api/cities", citiesRoutes);
 app.use("/api/parkings", parkingRoutes);
 app.use("/api/permisos", permisosRoutes);
 app.use("/api/mail", mailRoutes);
-// app.use("/api/grupos", gruposRoutes);
 app.use("/api/grupo-usuarios", grupoUsuariosRoutes);
 app.use("/api/reports", registerReportRoutes);
-// app.use("/api/help", helpRoutes);
 app.use("/api", helpPublicRoutes);
 app.use("/api", helpAdminRoutes);
 app.use("/api", searchRoutes);
 
-//rutas de Inventario
+// Inventario
 app.use("/api/clientes", clientesRoutes);
 app.use("/api/sites", siteRoutes);
 app.use("/api/inventario/bodegas", bodegasRoutes);
@@ -159,27 +170,38 @@ app.use("/api/inventario/sales-orders", salesOrdersRoutes);
 app.use("/api/inventario/sales-orders/lineas", salesOrdersActivosRoutes);
 app.use("/public", publicActivosRoutes);
 
-//Notificaciones
+// Notificaciones
 app.use("/api/notifications", notificacionesRoutes);
 app.use("/api/notifications/config", configRoutes);
 app.use("/api/notificaciones/grupos", gruposRoutes);
 app.use("/api/notificaciones/plantillas", plantillasRoutes);
 app.use("/api/notificaciones/eventos", eventosRoutes);
 
-// Middleware de manejo de errores de multer
-app.use((err, req, res, next) => {
+// Errores de multer
+app.use((err, _req, res, next) => {
   if (err instanceof multer.MulterError) {
-    // Errores propios de multer (tamaño, etc)
     return res.status(400).json({ error: err.message });
   }
-
-  if (err.message.includes("Tipo de archivo no permitido")) {
-    // Nuestro custom error de tipo MIME no válido
+  if (
+    typeof err?.message === "string" &&
+    err.message.includes("Tipo de archivo no permitido")
+  ) {
     return res.status(400).json({ error: err.message });
   }
+  return next(err);
+});
 
-  // Otros errores no manejados
-  console.error("❌ Error inesperado:", err);
+// 404
+app.use((req, res) => {
+  return res.status(404).json({ error: "No encontrado" });
+});
+
+// Error handler global (último)
+app.use((err, req, res, _next) => {
+  logger.error(
+    { err, url: req.originalUrl, method: req.method },
+    "Unhandled error"
+  );
   return res.status(500).json({ error: "Error interno del servidor." });
 });
 

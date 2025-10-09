@@ -2,40 +2,49 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import pool from "../../../config/connectionToSql.js";
 
+// Helpers
+const sendError = (res, status, msg) => res.status(status).json({ error: msg });
+const toInt = (v) => {
+  const n = Number(v);
+  return Number.isInteger(n) ? n : NaN;
+};
+
 // Obtener todos los usuarios
 export const getUsers = async (req, res) => {
   try {
-    const [rows] = await pool.query(
+    const [rows] = await pool.execute(
       "CALL gestion_usuarios('ListarUsuariosActivos', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)"
     );
-    res.json(rows[0]);
+    return res.json(rows[0]);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error("getUsers error:", error);
+    return sendError(res, 500, "Error interno");
   }
 };
 
 export const getUsersById = async (req, res) => {
   try {
-    const { id } = req.params;
-    const [rows] = await pool.query(
+    const id = toInt(req.params.id);
+    if (Number.isNaN(id)) return sendError(res, 400, "ID inválido");
+
+    const [rows] = await pool.execute(
       "CALL gestion_usuarios('Perfil', ?, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)",
       [id]
     );
-    res.json(rows[0]);
+    return res.json(rows[0]);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error("getUsersById error:", error);
+    return sendError(res, 500, "Error interno");
   }
 };
 
 export const getEmailSupervisor = async (req, res) => {
-  const { id_empleado } = req.query; // O usa req.body si es POST
-
-  if (!id_empleado) {
-    return res.status(400).json({ error: "Falta id_empleado" });
-  }
+  const id = toInt(req.query.id_empleado); // o req.body si lo prefieres
+  if (Number.isNaN(id))
+    return sendError(res, 400, "Falta o es inválido id_empleado");
 
   try {
-    const [rows] = await pool.query(
+    const [rows] = await pool.execute(
       `SELECT 
         e.id AS empleado_id,
         ue.nombre AS empleado_nombre,
@@ -48,16 +57,14 @@ export const getEmailSupervisor = async (req, res) => {
       LEFT JOIN empleados s ON e.supervisor_id = s.id
       LEFT JOIN usuarios us ON s.id_usuario = us.id_usuario
       WHERE e.id = ?`,
-      [id_empleado]
+      [id]
     );
 
-    if (!rows.length)
-      return res.status(404).json({ error: "Empleado no encontrado" });
-
-    res.json(rows[0]);
+    if (!rows.length) return sendError(res, 404, "Empleado no encontrado");
+    return res.json(rows[0]);
   } catch (error) {
-    console.error("Error al obtener supervisor:", error);
-    res.status(500).json({ error: error.message });
+    console.error("getEmailSupervisor error:", error);
+    return sendError(res, 500, "Error interno");
   }
 };
 
@@ -75,9 +82,21 @@ export const register = async (req, res) => {
   } = req.body;
 
   try {
-    const hashedPassword = await bcrypt.hash(password, 10);
+    if (!nombre || !email || !username || !password || !rol) {
+      return sendError(res, 400, "Datos incompletos");
+    }
+    const idCiudadNum = id_ciudad != null ? toInt(id_ciudad) : null;
+    const supervisorNum = supervisor_id != null ? toInt(supervisor_id) : null;
+    if (id_ciudad != null && Number.isNaN(idCiudadNum)) {
+      return sendError(res, 400, "id_ciudad inválido");
+    }
+    if (supervisor_id != null && Number.isNaN(supervisorNum)) {
+      return sendError(res, 400, "supervisor_id inválido");
+    }
 
-    await pool.query(
+    const hashedPassword = await bcrypt.hash(String(password), 10);
+
+    await pool.execute(
       "CALL gestion_usuarios('Registrar', NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       [
         nombre,
@@ -86,47 +105,51 @@ export const register = async (req, res) => {
         hashedPassword,
         rol,
         "Activo",
-        puesto,
-        id_ciudad,
-        supervisor_id,
+        puesto ?? null,
+        idCiudadNum,
+        supervisorNum,
       ]
     );
 
-    res.status(201).json({ message: "Usuario registrado correctamente" });
+    return res
+      .status(201)
+      .json({ message: "Usuario registrado correctamente" });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error("register error:", error);
+    // Si el SP lanza SIGNAL (email duplicado), cae aquí; responde genérico
+    return sendError(res, 500, "Error interno");
   }
 };
 
 // Inicio de sesión
 export const login = async (req, res) => {
-  const { username, password } = req.body;
-
   try {
-    const [rows] = await pool.query(
+    const { username, password } = req.body ?? {};
+    if (!username || !password) {
+      return sendError(res, 400, "Credenciales inválidas");
+    }
+
+    // ✅ Parametrizado; NO concatenar jamás
+    const [rows] = await pool.execute(
       "CALL gestion_usuarios('Login', NULL, NULL, NULL, ?, NULL, NULL, NULL, NULL, NULL, NULL)",
       [username]
     );
 
-    const user = rows[0][0];
-    if (!user) return res.status(400).json({ error: "Usuario no encontrado" });
+    const user = rows?.[0]?.[0] || null;
+    if (!user) return sendError(res, 401, "Credenciales inválidas");
 
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch)
-      return res.status(400).json({ error: "Contraseña incorrecta" });
+    const ok = await bcrypt.compare(String(password), user.password);
+    if (!ok) return sendError(res, 401, "Credenciales inválidas");
 
-    // ⬇️ Obtener permisos del usuario
-    const [permisosRows] = await pool.query(
-      `
-      SELECT p.nombre
-      FROM usuario_permisos up
-      INNER JOIN permisos p ON up.permiso_id = p.id
-      WHERE up.id_usuario = ?
-      `,
+    // Permisos del usuario (✅ parametrizado)
+    const [permisosRows] = await pool.execute(
+      `SELECT p.nombre
+       FROM usuario_permisos up
+       INNER JOIN permisos p ON up.permiso_id = p.id
+       WHERE up.id_usuario = ?`,
       [user.id_usuario]
     );
-
-    const permisos = permisosRows.map((p) => p.nombre); // ["ver_reportes", "editar_usuario", ...]
+    const permisos = permisosRows.map((p) => p.nombre);
 
     const token = jwt.sign(
       { id: user.id_usuario, rol: user.rol },
@@ -134,24 +157,27 @@ export const login = async (req, res) => {
       { expiresIn: "1h" }
     );
 
-    res.json({
+    return res.json({
       message: "Inicio de sesión exitoso",
       token,
       rol: user.rol,
       nombre: user.nombre,
       id: user.id_usuario,
-      id_empleado: user.id,
+      id_empleado: user.id, // viene del JOIN con empleados en el SP
       email: user.email,
-      permisos, // ⬅️ devolvemos los permisos
+      permisos,
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error("login error:", error);
+    return sendError(res, 500, "Error interno");
   }
 };
 
-// Actualizar un usuario
+// Actualizar un usuario (admin/similar)
 export const updateUser = async (req, res) => {
-  const { id } = req.params;
+  const id = toInt(req.params.id);
+  if (Number.isNaN(id)) return sendError(res, 400, "ID inválido");
+
   const {
     nombre,
     email,
@@ -165,115 +191,146 @@ export const updateUser = async (req, res) => {
   } = req.body;
 
   try {
-    const hashedPassword = password ? await bcrypt.hash(password, 10) : null;
+    const hashedPassword =
+      password && String(password).length
+        ? await bcrypt.hash(String(password), 10)
+        : null;
 
-    await pool.query(
+    const idCiudadNum = id_ciudad != null ? toInt(id_ciudad) : null;
+    const supervisorNum = supervisor_id != null ? toInt(supervisor_id) : null;
+    if (id_ciudad != null && Number.isNaN(idCiudadNum)) {
+      return sendError(res, 400, "id_ciudad inválido");
+    }
+    if (supervisor_id != null && Number.isNaN(supervisorNum)) {
+      return sendError(res, 400, "supervisor_id inválido");
+    }
+
+    await pool.execute(
       "CALL gestion_usuarios('Actualizar', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       [
         id,
-        nombre,
-        email,
-        username,
-        hashedPassword || null,
-        rol,
-        estatus,
-        puesto,
-        id_ciudad,
-        supervisor_id, // <-- Nuevo
+        nombre ?? null,
+        email ?? null,
+        username ?? null,
+        hashedPassword, // null si no se envía -> SP preserva
+        rol ?? null,
+        estatus ?? null,
+        puesto ?? null,
+        idCiudadNum,
+        supervisorNum,
       ]
     );
 
-    res.json({ message: "Usuario actualizado correctamente" });
+    return res.json({ message: "Usuario actualizado correctamente" });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error("updateUser error:", error);
+    return sendError(res, 500, "Error interno");
   }
 };
 
 // Actualizar perfil del usuario autenticado
 export const updateOwnProfile = async (req, res) => {
-  const userId = req.user.id;
-  const { nombre, email, username, password } = req.body;
+  const userId = req.user?.id;
+  if (!userId) return sendError(res, 401, "No autenticado");
+
+  const { nombre, email, username, password } = req.body ?? {};
 
   try {
-    const hashedPassword = password ? await bcrypt.hash(password, 10) : null;
+    const hashedPassword =
+      password && String(password).length
+        ? await bcrypt.hash(String(password), 10)
+        : null;
 
-    await pool.query(
+    await pool.execute(
       "CALL gestion_usuarios('Actualizar', ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL)",
-      [userId, nombre, email, username, hashedPassword || null]
+      [
+        toInt(userId),
+        nombre ?? null,
+        email ?? null,
+        username ?? null,
+        hashedPassword,
+      ]
     );
 
-    res.json({ message: "Perfil actualizado correctamente" });
+    return res.json({ message: "Perfil actualizado correctamente" });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error("updateOwnProfile error:", error);
+    return sendError(res, 500, "Error interno");
   }
 };
 
 // Eliminar lógicamente un usuario
 export const deleteUser = async (req, res) => {
-  const { id } = req.params;
+  const id = toInt(req.params.id);
+  if (Number.isNaN(id)) return sendError(res, 400, "ID inválido");
 
   try {
-    await pool.query(
+    await pool.execute(
       "CALL gestion_usuarios('Eliminar', ?, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)",
       [id]
     );
 
-    res.json({ message: "Usuario eliminado correctamente" });
+    return res.json({ message: "Usuario eliminado correctamente" });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error("deleteUser error:", error);
+    return sendError(res, 500, "Error interno");
   }
 };
 
 export const restoreUser = async (req, res) => {
-  const { id } = req.params;
+  const id = toInt(req.params.id);
+  if (Number.isNaN(id)) return sendError(res, 400, "ID inválido");
 
   try {
-    await pool.query(
+    await pool.execute(
       "CALL gestion_usuarios('Restaurar', ?, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)",
       [id]
     );
 
-    res.json({ message: "Usuario restaurado correctamente" });
+    return res.json({ message: "Usuario restaurado correctamente" });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error("restoreUser error:", error);
+    return sendError(res, 500, "Error interno");
   }
 };
 
 export const resetPassword = async (req, res) => {
-  const { token, newPassword } = req.body;
+  const { token, newPassword } = req.body ?? {};
+  if (!token || !newPassword) return sendError(res, 400, "Datos incompletos");
 
   try {
-    // 1. Buscar el token en la base de datos
-    // Verifica que el token exista, no esté usado y no haya expirado
-    const [tokens] = await pool.query(
+    // 1) Buscar token válido
+    const [tokens] = await pool.execute(
       "SELECT * FROM password_reset_tokens WHERE token = ? AND used = FALSE AND expires_at > NOW()",
       [token]
     );
-    const resetTokenEntry = tokens[0];
+    const resetTokenEntry = tokens?.[0];
 
     if (!resetTokenEntry) {
       return res.status(400).json({ message: "Token inválido o expirado." });
     }
 
-    // 2. Hashear la nueva contraseña
-    const hashedPassword = await bcrypt.hash(newPassword, 8); // 10 es el costo del salt, un buen valor estándar
+    // 2) Hashear nueva contraseña
+    const hashedPassword = await bcrypt.hash(String(newPassword), 10);
 
-    // 3. Actualizar la contraseña del usuario
-    await pool.query("UPDATE usuarios SET password = ? WHERE id_usuario = ?", [
-      hashedPassword,
-      resetTokenEntry.user_id, // Usar el user_id asociado al token
-    ]);
+    // 3) Actualizar contraseña del usuario
+    await pool.execute(
+      "UPDATE usuarios SET password = ? WHERE id_usuario = ?",
+      [hashedPassword, resetTokenEntry.user_id]
+    );
 
-    // 4. Marcar el token como usado
-    await pool.query(
+    // 4) Marcar token como usado
+    await pool.execute(
       "UPDATE password_reset_tokens SET used = TRUE WHERE id = ?",
       [resetTokenEntry.id]
     );
 
-    res.status(200).json({ message: "Contraseña restablecida exitosamente." });
+    return res
+      .status(200)
+      .json({ message: "Contraseña restablecida exitosamente." });
   } catch (error) {
-    console.error("Error al restablecer la contraseña:", error);
-    res.status(500).json({
+    console.error("resetPassword error:", error);
+    return res.status(500).json({
       message: "Error interno del servidor al restablecer la contraseña.",
     });
   }

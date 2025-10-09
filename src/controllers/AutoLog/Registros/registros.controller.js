@@ -1,21 +1,36 @@
+// controllers/AutoLog/register.controller.js
 import pool from "../../../config/connectionToSql.js";
+import logger from "../../../utils/logger.js";
 import NotificationConfigService from "../../../services/notifications/NotificationConfigService.js";
 import NotificationService from "../../../services/notifications/NotificationService.js";
 
+const toInt = (v) => {
+  const n = Number(v);
+  return Number.isInteger(n) ? n : NaN;
+};
+const isNonEmptyStr = (s) => typeof s === "string" && s.trim().length > 0;
+const ALLOWED_MIME = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+  "image/jpg",
+]);
+
 // 📌 Obtener registro activo del empleado
 export const obtenerRegistroPendienteEmpleado = async (req, res) => {
-  const { id_empleado } = req.params;
+  const idEmpleado = toInt(req.params.id_empleado);
+  if (Number.isNaN(idEmpleado))
+    return res.status(400).json({ message: "id_empleado inválido" });
 
   try {
-    const [resultado] = await pool.query(
-      `
-            SELECT r.id AS id_registro, r.id_vehiculo, v.placa , 'En Uso' AS estado
-            FROM registros r INNER JOIN vehiculos v
-            ON r.id_vehiculo = v.id
-            WHERE id_empleado = ? AND fecha_regreso IS NULL
-            LIMIT 1;
-        `,
-      [id_empleado]
+    const [resultado] = await pool.execute(
+      `SELECT r.id AS id_registro, r.id_vehiculo, v.placa, 'En Uso' AS estado
+         FROM registros r
+         INNER JOIN vehiculos v ON r.id_vehiculo = v.id
+        WHERE r.id_empleado = ? AND r.fecha_regreso IS NULL
+        LIMIT 1`,
+      [idEmpleado]
     );
 
     if (resultado.length === 0) {
@@ -24,129 +39,66 @@ export const obtenerRegistroPendienteEmpleado = async (req, res) => {
         .json({ message: "No hay registros pendientes para este empleado." });
     }
 
-    res.json(resultado[0]);
-  } catch (error) {
-    console.error("❌ Error al obtener registro pendiente:", error);
-    res
-      .status(500)
-      .json({ error: "Error interno del servidor.", details: error.message });
+    return res.json(resultado[0]);
+  } catch (err) {
+    logger.error({ err }, "obtenerRegistroPendienteEmpleado failed");
+    return res.status(500).json({ error: "Error interno del servidor." });
   }
 };
 
 export const obtenerKmActual = async (req, res) => {
-  const { id_vehiculo } = req.params;
+  const idVehiculo = toInt(req.params.id_vehiculo);
+  if (Number.isNaN(idVehiculo))
+    return res.status(400).json({ message: "id_vehiculo inválido" });
 
   try {
-    const [resultado] = await pool.query(
-      `
-          SELECT km_regreso, km_salida
-          FROM registros r INNER JOIN vehiculos v
-          ON r.id_vehiculo = v.id
-          WHERE r.id_vehiculo = ?
-          ORDER BY km_regreso desc
-          LIMIT 1;
-        `,
-      [id_vehiculo]
+    const [resultado] = await pool.execute(
+      `SELECT r.km_regreso, r.km_salida
+         FROM registros r
+        WHERE r.id_vehiculo = ?
+        ORDER BY r.km_regreso DESC
+        LIMIT 1`,
+      [idVehiculo]
     );
 
     if (resultado.length === 0) {
       return res.status(404).json({ message: "No hay KM Registrado" });
     }
 
-    res.json(resultado[0]);
-  } catch (error) {
-    console.error("❌ Error al obtener registro pendiente:", error);
-    res
-      .status(500)
-      .json({ error: "Error interno del servidor.", details: error.message });
+    return res.json(resultado[0]);
+  } catch (err) {
+    logger.error({ err }, "obtenerKmActual failed");
+    return res.status(500).json({ error: "Error interno del servidor." });
   }
 };
 
 export const obtenerCombustibleActual = async (req, res) => {
-  const { id_vehiculo } = req.params;
+  const idVehiculo = toInt(req.params.id_vehiculo);
+  if (Number.isNaN(idVehiculo))
+    return res.status(400).json({ message: "id_vehiculo inválido" });
 
   try {
-    const [resultado] = await pool.query(
-      `
-          SELECT combustible_salida, combustible_regreso
-          FROM registros r INNER JOIN vehiculos v
-          ON r.id_vehiculo = v.id
-          WHERE r.id_vehiculo = ?
-          ORDER BY km_regreso DESC
-          LIMIT 1;
-        `,
-      [id_vehiculo]
+    const [resultado] = await pool.execute(
+      `SELECT r.combustible_salida, r.combustible_regreso
+         FROM registros r
+        WHERE r.id_vehiculo = ?
+        ORDER BY r.km_regreso DESC
+        LIMIT 1`,
+      [idVehiculo]
     );
 
     if (resultado.length === 0) {
       return res.status(404).json({ message: "No hay combustible Registrado" });
     }
 
-    res.json(resultado[0]);
-  } catch (error) {
-    console.error("❌ Error al obtener registro pendiente:", error);
-    res
-      .status(500)
-      .json({ error: "Error interno del servidor.", details: error.message });
+    return res.json(resultado[0]);
+  } catch (err) {
+    logger.error({ err }, "obtenerCombustibleActual failed");
+    return res.status(500).json({ error: "Error interno del servidor." });
   }
 };
-// export const registrarSalida = async (req, res) => {
-//   const {
-//     id_empleado,
-//     id_vehiculo,
-//     id_ubicacion_salida,
-//     km_salida,
-//     combustible_salida,
-//     comentario_salida,
-//   } = req.body;
 
-//   try {
-//     const fecha_salida = new Date(); // Ahora
-//     const fecha_regreso = null;
-
-//     await pool.query(
-//       `CALL GestionarRegistros(
-//         'InsertarSalida',
-//         NULL,     -- _id
-//         ?,        -- _id_empleado
-//         ?,        -- _id_vehiculo
-//         ?,        -- _id_ubicacion_salida
-//         NULL,     -- _id_ubicacion_regreso
-//         ?,        -- _km_salida
-//         NULL,     -- _km_regreso
-//         ?,        -- _combustible_salida
-//         NULL,     -- _combustible_regreso
-//         ?,        -- _comentario_salida
-//         NULL,     -- _comentario_regreso
-//         ?,        -- _fecha_salida
-//         NULL,     -- _fecha_regreso
-//         @insertId
-//       );`,
-//       [
-//         id_empleado,
-//         id_vehiculo,
-//         id_ubicacion_salida,
-//         km_salida,
-//         combustible_salida,
-//         comentario_salida,
-//         fecha_salida,
-//       ]
-//     );
-
-//     const [result] = await pool.query("SELECT @insertId AS insertId");
-
-//     res.status(201).json({
-//       message: "Registro de salida creado.",
-//       id_registro: result[0].insertId,
-//     });
-//   } catch (error) {
-//     console.error("❌ Error al registrar salida:", error);
-//     res
-//       .status(500)
-//       .json({ error: "Error al registrar salida.", details: error.message });
-//   }
-// };
-
+// 🚙 Registrar salida (con imágenes)
 export const registrarSalida = async (req, res) => {
   const {
     id_empleado,
@@ -155,12 +107,30 @@ export const registrarSalida = async (req, res) => {
     km_salida,
     combustible_salida,
     comentario_salida,
-  } = req.body;
+  } = req.body ?? {};
+
+  const idEmpleado = toInt(id_empleado);
+  const idVehiculo = toInt(id_vehiculo);
+  const idUbicacionSalida = toInt(id_ubicacion_salida);
+  const kmSalidaNum = toInt(km_salida);
+
+  if ([idEmpleado, idVehiculo, idUbicacionSalida].some(Number.isNaN)) {
+    return res.status(400).json({ error: "IDs inválidos" });
+  }
+  if (Number.isNaN(kmSalidaNum)) {
+    return res.status(400).json({ error: "km_salida inválido" });
+  }
 
   const archivos = req.files;
-
   if (!archivos || archivos.length === 0) {
     return res.status(400).json({ error: "Debes subir al menos una imagen." });
+  }
+  for (const f of archivos) {
+    if (!ALLOWED_MIME.has(f.mimetype)) {
+      return res
+        .status(400)
+        .json({ error: `Tipo de archivo no permitido: ${f.mimetype}` });
+    }
   }
 
   const conn = await pool.getConnection();
@@ -169,39 +139,42 @@ export const registrarSalida = async (req, res) => {
 
     const fecha_salida = new Date();
 
-    await conn.query(
+    // ⚠️ Mantengo tu firma de SP y @insertId
+    await conn.execute(
       `CALL GestionarRegistros(
         'InsertarSalida',
         NULL, ?, ?, ?, NULL,
         ?, NULL, ?, NULL,
         ?, NULL, ?, NULL,
         @insertId
-      );`,
+      )`,
       [
-        id_empleado,
-        id_vehiculo,
-        id_ubicacion_salida,
-        km_salida,
-        combustible_salida,
-        comentario_salida,
+        idEmpleado,
+        idVehiculo,
+        idUbicacionSalida,
+        kmSalidaNum,
+        toInt(combustible_salida) ?? null,
+        isNonEmptyStr(comentario_salida) ? comentario_salida.trim() : null,
         fecha_salida,
       ]
     );
 
-    const [[{ insertId }]] = await conn.query("SELECT @insertId AS insertId");
+    const [[{ insertId }]] = await conn.execute("SELECT @insertId AS insertId");
 
     for (const file of archivos) {
-      const baseUrl = process.env.HOST?.replace(/\/$/, "") || "";
+      const baseUrl = (process.env.HOST || process.env.APP_URL || "").replace(
+        /\/$/,
+        ""
+      );
       const url = `${baseUrl}/uploads/registros/${file.filename}`;
 
-      const [imageResult] = await conn.query(
+      const [imageResult] = await conn.execute(
         "INSERT INTO images (type, url) VALUES (?, ?)",
         [file.mimetype, url]
       );
 
       const id_image = imageResult.insertId;
-
-      await conn.query("CALL GestionarImagenes('Insertar', ?, ?);", [
+      await conn.execute("CALL GestionarImagenes('Insertar', ?, ?)", [
         insertId,
         id_image,
       ]);
@@ -209,15 +182,15 @@ export const registrarSalida = async (req, res) => {
 
     await conn.commit();
 
-    // === Notificación post-commit (no rompe la respuesta si falla) ===
-    try {
-      // ¿Está activo el evento en Settings?
-      const enabled = await NotificationConfigService.isEnabled(
-        "VEHICULO_SALIDA"
-      );
-      if (enabled) {
-        // Traer datos para el template (employeeName, vehicleName, supervisorName)
-        const [[info]] = await conn.query(
+    // === Notificación post-commit (no bloquea la respuesta si falla) ===
+    (async () => {
+      try {
+        const enabled = await NotificationConfigService.isEnabled(
+          "VEHICULO_SALIDA"
+        );
+        if (!enabled) return;
+
+        const [[info]] = await pool.execute(
           `SELECT 
              u.nombre  AS employeeName,
              v.placa   AS vehicleName,
@@ -229,115 +202,59 @@ export const registrarSalida = async (req, res) => {
            JOIN vehiculos v      ON v.id = ?
            WHERE e.id = ?
            LIMIT 1`,
-          [id_vehiculo, id_empleado]
+          [idVehiculo, idEmpleado]
         );
 
         const tz = "America/Tegucigalpa";
-        const fecha = new Date(fecha_salida).toLocaleDateString("es-HN", {
-          timeZone: tz,
-        });
-        const hora = new Date(fecha_salida).toLocaleTimeString("es-HN", {
+        const fecha = new Date().toLocaleDateString("es-HN", { timeZone: tz });
+        const hora = new Date().toLocaleTimeString("es-HN", {
           timeZone: tz,
           hour: "2-digit",
           minute: "2-digit",
           hour12: false,
         });
 
-        // Disparar notificación (usa tu motor nuevo; plantillas de disco)
         await NotificationService.createAndSend({
           clave: "VEHICULO_SALIDA",
           payload: {
-            // claves que usa tu template notificationSalida.html:
             employeeName: info?.employeeName || "",
             vehicleName: info?.vehicleName || "",
             supervisorName: info?.supervisorName || "",
             fecha,
             hora,
-            // meta útil para logs/links
             registroId: insertId,
-            vehiculo_id: id_vehiculo,
-            empleado_id: id_empleado,
-            link_detalle: `${
-              process.env.APP_URL || ""
-            }/vehiculos/registros/${insertId}`,
+            vehiculo_id: idVehiculo,
+            empleado_id: idEmpleado,
+            link_detalle: `${(process.env.APP_URL || "").replace(
+              /\/$/,
+              ""
+            )}/vehiculos/registros/${insertId}`,
           },
-          creado_por: req.user?.id_usuario || null,
+          creado_por: req.user?.id || null, // <- consistente con tu JWT
         });
+      } catch (notifErr) {
+        logger.warn({ err: notifErr }, "Notificación SALIDA falló");
       }
-    } catch (notifErr) {
-      console.error(
-        "⚠️ Notificación de SALIDA falló:",
-        notifErr?.message || notifErr
-      );
-      // no hacemos throw: la creación del registro fue exitosa
-    }
+    })().catch(() => {
+      /* noop */
+    });
 
-    res.status(201).json({
+    return res.status(201).json({
       message: "Registro de salida y subida de imágenes exitosos.",
       id_registro: insertId,
     });
-  } catch (error) {
+  } catch (err) {
     await conn.rollback();
-    console.error("❌ Error al registrar salida con imágenes:", error);
-    res.status(500).json({
+    logger.error({ err }, "registrarSalida failed");
+    return res.status(500).json({
       error: "Error al registrar salida con imágenes.",
-      details: error.message,
     });
   } finally {
     conn.release();
   }
 };
-// export const registrarRegreso = async (req, res) => {
-//   const {
-//     id_registro,
-//     id_empleado,
-//     id_ubicacion_regreso,
-//     km_regreso,
-//     combustible_regreso,
-//     comentario_regreso,
-//   } = req.body;
 
-//   try {
-//     const fecha_regreso = new Date();
-
-//     await pool.query(
-//       `CALL GestionarRegistros(
-//         'RegistrarRegreso',
-//         ?,     -- _id
-//         ?,     -- _id_empleado
-//         NULL,  -- _id_vehiculo
-//         NULL,  -- _id_ubicacion_salida
-//         ?,     -- _id_ubicacion_regreso
-//         NULL,  -- _km_salida
-//         ?,     -- _km_regreso
-//         NULL,  -- _combustible_salida
-//         ?,     -- _combustible_regreso
-//         NULL,  -- _comentario_salida
-//         ?,     -- _comentario_regreso
-//         NULL,  -- _fecha_salida
-//         ?,     -- _fecha_regreso
-//         @insertId
-//       );`,
-//       [
-//         id_registro,
-//         id_empleado,
-//         id_ubicacion_regreso,
-//         km_regreso,
-//         combustible_regreso,
-//         comentario_regreso,
-//         fecha_regreso,
-//       ]
-//     );
-
-//     res.json({ message: "Registro de regreso actualizado." });
-//   } catch (error) {
-//     console.error("❌ Error al registrar regreso:", error);
-//     res
-//       .status(500)
-//       .json({ error: "Error al registrar regreso.", details: error.message });
-//   }
-// };
-
+// 🚙 Registrar regreso (con imágenes)
 export const registrarRegreso = async (req, res) => {
   const {
     id_registro,
@@ -346,12 +263,30 @@ export const registrarRegreso = async (req, res) => {
     km_regreso,
     combustible_regreso,
     comentario_regreso,
-  } = req.body;
+  } = req.body ?? {};
+
+  const idRegistro = toInt(id_registro);
+  const idEmpleado = toInt(id_empleado);
+  const idUbicacionReg = toInt(id_ubicacion_regreso);
+  const kmRegresoNum = toInt(km_regreso);
+
+  if ([idRegistro, idEmpleado, idUbicacionReg].some(Number.isNaN)) {
+    return res.status(400).json({ error: "IDs inválidos" });
+  }
+  if (Number.isNaN(kmRegresoNum)) {
+    return res.status(400).json({ error: "km_regreso inválido" });
+  }
 
   const archivos = req.files;
-
   if (!archivos || archivos.length === 0) {
     return res.status(400).json({ error: "Debes subir al menos una imagen." });
+  }
+  for (const f of archivos) {
+    if (!ALLOWED_MIME.has(f.mimetype)) {
+      return res
+        .status(400)
+        .json({ error: `Tipo de archivo no permitido: ${f.mimetype}` });
+    }
   }
 
   const conn = await pool.getConnection();
@@ -360,7 +295,7 @@ export const registrarRegreso = async (req, res) => {
 
     const fecha_regreso = new Date();
 
-    await conn.query(
+    await conn.execute(
       `CALL GestionarRegistros(
         'RegistrarRegreso',
         ?,     -- _id
@@ -377,56 +312,58 @@ export const registrarRegreso = async (req, res) => {
         NULL,  -- _fecha_salida
         ?,     -- _fecha_regreso
         @insertId
-      );`,
+      )`,
       [
-        id_registro,
-        id_empleado,
-        id_ubicacion_regreso,
-        km_regreso,
-        combustible_regreso,
-        comentario_regreso,
+        idRegistro,
+        idEmpleado,
+        idUbicacionReg,
+        kmRegresoNum,
+        toInt(combustible_regreso) ?? null,
+        isNonEmptyStr(comentario_regreso) ? comentario_regreso.trim() : null,
         fecha_regreso,
       ]
     );
 
-    //'RegistrarRegreso',
-
+    // Asociar imágenes al registro existente
     for (const file of archivos) {
-      const baseUrl = process.env.HOST?.replace(/\/$/, "") || "";
+      const baseUrl = (process.env.HOST || process.env.APP_URL || "").replace(
+        /\/$/,
+        ""
+      );
       const url = `${baseUrl}/uploads/registros/${file.filename}`;
 
-      const [imageResult] = await conn.query(
+      const [imageResult] = await conn.execute(
         "INSERT INTO images (type, url) VALUES (?, ?)",
         [file.mimetype, url]
       );
 
       const id_image = imageResult.insertId;
-
-      await conn.query("CALL GestionarImagenes('Insertar', ?, ?);", [
-        id_registro,
+      await conn.execute("CALL GestionarImagenes('Insertar', ?, ?)", [
+        idRegistro,
         id_image,
       ]);
     }
 
     await conn.commit();
 
-    // === Notificación post-commit (no rompe la respuesta si falla) ===
-    try {
-      const enabled = await NotificationConfigService.isEnabled(
-        "VEHICULO_REGRESO"
-      );
-      if (enabled) {
-        // Obtener placa desde el registro y nombres desde empleado/supervisor
-        const [[veh]] = await conn.query(
-          `SELECT v.placa AS vehicleName
-           FROM registros r 
-           JOIN vehiculos v ON v.id = r.id_vehiculo
-           WHERE r.id = ?
-           LIMIT 1`,
-          [id_registro]
+    // === Notificación post-commit ===
+    (async () => {
+      try {
+        const enabled = await NotificationConfigService.isEnabled(
+          "VEHICULO_REGRESO"
+        );
+        if (!enabled) return;
+
+        const [[veh]] = await pool.execute(
+          `SELECT v.id AS vehiculo_id, v.placa AS vehicleName
+             FROM registros r 
+             JOIN vehiculos v ON v.id = r.id_vehiculo
+            WHERE r.id = ?
+            LIMIT 1`,
+          [idRegistro]
         );
 
-        const [[info]] = await conn.query(
+        const [[info]] = await pool.execute(
           `SELECT 
              u.nombre  AS employeeName,
              su.nombre AS supervisorName
@@ -434,16 +371,14 @@ export const registrarRegreso = async (req, res) => {
            JOIN usuarios u       ON u.id_usuario = e.id_usuario
            LEFT JOIN empleados s ON s.id = e.supervisor_id
            LEFT JOIN usuarios su ON su.id_usuario = s.id_usuario
-           WHERE e.id = ?
-           LIMIT 1`,
-          [id_empleado]
+          WHERE e.id = ?
+          LIMIT 1`,
+          [idEmpleado]
         );
 
         const tz = "America/Tegucigalpa";
-        const fecha = new Date(fecha_regreso).toLocaleDateString("es-HN", {
-          timeZone: tz,
-        });
-        const hora = new Date(fecha_regreso).toLocaleTimeString("es-HN", {
+        const fecha = new Date().toLocaleDateString("es-HN", { timeZone: tz });
+        const hora = new Date().toLocaleTimeString("es-HN", {
           timeZone: tz,
           hour: "2-digit",
           minute: "2-digit",
@@ -453,133 +388,142 @@ export const registrarRegreso = async (req, res) => {
         await NotificationService.createAndSend({
           clave: "VEHICULO_REGRESO",
           payload: {
-            // Si usas un template de regreso con las mismas claves, mantén estos nombres
             employeeName: info?.employeeName || "",
             vehicleName: veh?.vehicleName || "",
             supervisorName: info?.supervisorName || "",
             fecha,
             hora,
-            registroId: id_registro,
-            vehiculo_id: veh?.vehiculo_id || null,
-            empleado_id: id_empleado,
-            link_detalle: `${
-              process.env.APP_URL || ""
-            }/vehiculos/registros/${id_registro}`,
+            registroId: idRegistro,
+            vehiculo_id: veh?.vehiculo_id ?? null,
+            empleado_id: idEmpleado,
+            link_detalle: `${(process.env.APP_URL || "").replace(
+              /\/$/,
+              ""
+            )}/vehiculos/registros/${idRegistro}`,
           },
-          creado_por: req.user?.id_usuario || null,
+          creado_por: req.user?.id || null,
         });
+      } catch (notifErr) {
+        logger.warn({ err: notifErr }, "Notificación REGRESO falló");
       }
-    } catch (notifErr) {
-      console.error(
-        "⚠️ Notificación de REGRESO falló:",
-        notifErr?.message || notifErr
-      );
-    }
+    })().catch(() => {
+      /* noop */
+    });
 
-    res.status(200).json({
+    return res.status(200).json({
       message: "Registro de regreso y subida de imágenes exitosos.",
     });
-  } catch (error) {
+  } catch (err) {
     await conn.rollback();
-    console.error("❌ Error al registrar regreso con imágenes:", error);
-    res.status(500).json({
+    logger.error({ err }, "registrarRegreso failed");
+    return res.status(500).json({
       error: "Error al registrar regreso con imágenes.",
-      details: error.message,
     });
   } finally {
     conn.release();
   }
 };
 
-// 📸 Asociar imágenes a un registro
+// 📸 Asociar imágenes a un registro (transaccional)
 export const asociarImagenes = async (req, res) => {
-  const id_registro = req.params.id;
-  const archivos = req.files;
-
-  if (!id_registro) {
-    return res
-      .status(400)
-      .json({ error: "El ID del registro es obligatorio." });
+  const idRegistro = toInt(req.params.id);
+  if (Number.isNaN(idRegistro)) {
+    return res.status(400).json({
+      error: "El ID del registro es obligatorio y debe ser numérico.",
+    });
   }
 
+  const archivos = req.files;
   if (!archivos || archivos.length === 0) {
     return res.status(400).json({ error: "No se enviaron archivos." });
   }
+  for (const f of archivos) {
+    if (!ALLOWED_MIME.has(f.mimetype)) {
+      return res
+        .status(400)
+        .json({ error: `Tipo de archivo no permitido: ${f.mimetype}` });
+    }
+  }
 
+  const conn = await pool.getConnection();
   try {
+    await conn.beginTransaction();
+
     for (const file of archivos) {
-      // ✅ Usar HOST dinámico desde variables de entorno
-      const baseUrl =
-        process.env.HOST?.replace(/\/$/, "") || "http://localhost:3000";
+      const baseUrl = (
+        process.env.HOST ||
+        process.env.APP_URL ||
+        "http://localhost:3000"
+      ).replace(/\/$/, "");
       const url = `${baseUrl}/uploads/registros/${file.filename}`;
 
-      // ✅ Insertar imagen en `images`
-      const [imageResult] = await pool.query(
+      const [imageResult] = await conn.execute(
         "INSERT INTO images (type, url) VALUES (?, ?)",
         [file.mimetype, url]
       );
 
       const id_image = imageResult.insertId;
-
-      if (!id_image) {
+      if (!id_image)
         throw new Error("No se pudo obtener el ID de la imagen insertada.");
-      }
 
-      // ✅ Asociar la imagen al registro
-      const [relationResult] = await pool.query(
-        "CALL GestionarImagenes('Insertar', ?, ?);",
-        [id_registro, id_image]
-      );
+      await conn.execute("CALL GestionarImagenes('Insertar', ?, ?)", [
+        idRegistro,
+        id_image,
+      ]);
     }
 
-    res.json({ message: "Imágenes asociadas correctamente." });
-  } catch (error) {
-    res
-      .status(500)
-      .json({ error: "Error al subir imágenes.", details: error.message });
+    await conn.commit();
+    return res.json({ message: "Imágenes asociadas correctamente." });
+  } catch (err) {
+    await conn.rollback();
+    logger.error({ err }, "asociarImagenes failed");
+    return res.status(500).json({ error: "Error al subir imágenes." });
+  } finally {
+    conn.release();
   }
 };
 
 // 📸 Obtener un registro con sus imágenes
 export const obtenerRegistroConImagenes = async (req, res) => {
-  const { id } = req.params;
+  const id = toInt(req.params.id);
+  if (Number.isNaN(id)) return res.status(400).json({ error: "ID inválido" });
 
   try {
-    const [[registro]] = await pool.query(
-      `
-      SELECT r.*, v.placa, e.nombre AS empleado
-      FROM registros r
-      JOIN vehiculos v ON r.id_vehiculo = v.id
-      JOIN empleados e ON r.id_empleado = e.id
-      WHERE r.id = ?
-    `,
+    const [[registro]] = await pool.execute(
+      `SELECT r.*, v.placa, u.nombre AS empleado
+         FROM registros r
+         JOIN vehiculos v ON r.id_vehiculo = v.id
+         JOIN empleados e ON r.id_empleado = e.id
+         JOIN usuarios  u ON u.id_usuario = e.id_usuario
+        WHERE r.id = ?
+        LIMIT 1`,
       [id]
     );
 
     if (!registro)
       return res.status(404).json({ error: "Registro no encontrado." });
 
-    const [imagenes] = await pool.query(
-      `
-      SELECT i.url FROM registro_images ri
-      JOIN images i ON ri.id_image = i.id_image
-      WHERE ri.id_registro = ?
-    `,
+    const [imagenes] = await pool.execute(
+      `SELECT i.url
+         FROM registro_images ri
+         JOIN images i ON ri.id_image = i.id_image
+        WHERE ri.id_registro = ?`,
       [id]
     );
 
-    res.json({ registro, imagenes });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Error obteniendo el registro." });
+    return res.json({ registro, imagenes });
+  } catch (err) {
+    logger.error({ err }, "obtenerRegistroConImagenes failed");
+    return res.status(500).json({ error: "Error obteniendo el registro." });
   }
 };
 
-export const getCiudades = async (req, res) => {
+export const getCiudades = async (_req, res) => {
   try {
-    const [result] = await pool.query("SELECT * FROM ciudades");
-    res.json(result);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+    const [result] = await pool.execute("SELECT * FROM ciudades");
+    return res.json(result);
+  } catch (err) {
+    logger.error({ err }, "getCiudades failed");
+    return res.status(500).json({ error: "Error interno del servidor." });
   }
 };
