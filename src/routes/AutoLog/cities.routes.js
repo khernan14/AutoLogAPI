@@ -94,7 +94,12 @@ router.post("/", authenticate, authorizeByPermisos("crear_ciudades"), addCity);
  *       200:
  *         description: Ciudad actualizada
  */
-router.put("/:id", authorizeByPermisos("editar_ciudades"), updateCity);
+router.put(
+  "/:id",
+  authenticate,
+  authorizeByPermisos("editar_ciudades"),
+  updateCity
+);
 
 /**
  * @swagger
@@ -115,6 +120,11 @@ router.put("/:id", authorizeByPermisos("editar_ciudades"), updateCity);
  *       200:
  *         description: Ciudad eliminada
  */
-router.delete("/:id", authorizeByPermisos("eliminar_ciudades"), deleteCity);
+router.delete(
+  "/:id",
+  authenticate,
+  authorizeByPermisos("eliminar_ciudades"),
+  deleteCity
+);
 
 export default router;
