@@ -1,11 +1,11 @@
 import pool from "../../config/connectionToSql.js";
 
 // Helper para guardar imagen en tabla `images`
-async function saveImage(file, conn) {
+async function saveImage(file, conn, folder = "registros") {
   if (!file) return null;
   const baseUrl =
     process.env.HOST?.replace(/\/$/, "") || "http://localhost:3000";
-  const url = `${baseUrl}/uploads/registros/${file.filename}`;
+  const url = `${baseUrl}/uploads/${folder}/${file.filename}`;
 
   const [imageResult] = await conn.query(
     "INSERT INTO images (type, url) VALUES (?, ?)",
@@ -61,7 +61,8 @@ export const createCliente = async (req, res) => {
 
     let logo_image_id = null;
     if (file) {
-      logo_image_id = await saveImage(file, conn);
+      // ⬅️ guarda en subcarpeta 'clientes'
+      logo_image_id = await saveImage(file, conn, "clientes");
     }
 
     const [result] = await conn.query(
@@ -86,6 +87,7 @@ export const createCliente = async (req, res) => {
         .status(409)
         .json({ message: "El código ya existe, ingrese uno diferente." });
     }
+    console.error("❌ Error en createCliente:", error);
     res.status(500).json({ error: error.message });
   } finally {
     conn.release();
@@ -104,7 +106,8 @@ export const updateCliente = async (req, res) => {
 
     let logo_image_id = null;
     if (file) {
-      logo_image_id = await saveImage(file, conn);
+      // ⬅️ guarda en subcarpeta 'clientes'
+      logo_image_id = await saveImage(file, conn, "clientes");
     }
 
     const [result] = await conn.query(
@@ -132,12 +135,18 @@ export const updateCliente = async (req, res) => {
       message: "Cliente actualizado correctamente",
       logo_image_id,
     });
-  } catch (err) {
-    let msg = err.message;
-    if (msg.includes("Duplicate entry") && msg.includes("codigo")) {
-      msg = "El código ya existe, por favor usa otro.";
+  } catch (error) {
+    await conn.rollback();
+    if (
+      error.code === "ER_DUP_ENTRY" ||
+      (error.message || "").includes("Duplicate entry")
+    ) {
+      return res
+        .status(409)
+        .json({ message: "El código ya existe, por favor usa otro." });
     }
-    setSnackbar({ open: true, message: msg, color: "danger" });
+    console.error("❌ Error en updateCliente:", error);
+    res.status(500).json({ error: error.message });
   } finally {
     conn.release();
   }
