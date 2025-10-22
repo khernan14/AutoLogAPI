@@ -42,7 +42,11 @@ import plantillasRoutes from "./src/routes/Notificaciones/plantillas.routes.js";
 import gruposRoutes from "./src/routes/Notificaciones/grupos.routes.js";
 import eventosRoutes from "./src/routes/Notificaciones/eventos.routes.js";
 
+// Viaticos
+import viaticosRoutes from "./src/routes/Finanzas/viaticos.routes.js";
+
 import path from "path";
+import fs from "fs";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
 import multer from "multer";
@@ -118,8 +122,19 @@ app.use((err, req, res, next) => {
 });
 
 // Archivos estáticos
-const uploadsPath = path.join(__dirname, "src", "uploads");
-app.use("/uploads", express.static(uploadsPath));
+const defaultUploads = path.join(process.cwd(), "src", "uploads");
+const uploadsRoot = process.env.UPLOADS_PATH || defaultUploads;
+
+// Crea carpetas necesarias al arrancar
+fs.mkdirSync(uploadsRoot, { recursive: true });
+// (opcional) si deseas mantener ambas subcarpetas disponibles
+for (const sub of ["registros", "clientes"]) {
+  fs.mkdirSync(path.join(uploadsRoot, sub), { recursive: true });
+}
+
+app.set("trust proxy", 1);
+
+app.use("/uploads", express.static(uploadsRoot));
 
 // Swagger
 app.use(
@@ -176,6 +191,9 @@ app.use("/api/notifications/config", configRoutes);
 app.use("/api/notificaciones/grupos", gruposRoutes);
 app.use("/api/notificaciones/plantillas", plantillasRoutes);
 app.use("/api/notificaciones/eventos", eventosRoutes);
+
+// Viaticos
+app.use("/api/viaticos", viaticosRoutes);
 
 // Errores de multer
 app.use((err, _req, res, next) => {
