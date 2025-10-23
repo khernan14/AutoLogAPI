@@ -24,7 +24,7 @@ export const getActivos = async (_req, res) => {
         (SELECT id_cliente_site FROM (${LOC_ACTUAL_SQL}) AS loc) AS ubicacion_cliente_site,
         (SELECT id_bodega FROM (${LOC_ACTUAL_SQL}) AS loc) AS ubicacion_bodega
       FROM activos a
-      ORDER BY a.fecha_registro DESC
+      ORDER BY a.codigo DESC
     `);
     res.json(rows);
   } catch (error) {
