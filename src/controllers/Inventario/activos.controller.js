@@ -157,100 +157,84 @@ export const getActivosByCliente = async (req, res) => {
 // ==============================
 export const createActivo = async (req, res) => {
   const connection = await pool.getConnection();
+  const toStrOrNull = (v) =>
+    v === undefined || v === null ? null : String(v).trim() || null;
+
   try {
     const {
-      codigo: bodyCodigo,
+      codigo,
       nombre,
-      modelo = null,
-      serial_number = null,
-      tipo = "Otro",
-      estatus = "Activo",
+      modelo,
+      serial_number,
+      tipo,
+      estatus,
       id_bodega,
-      usuario_responsable = null,
-    } = req.body;
+      usuario_responsable,
+    } = req.body || {};
 
     if (!id_bodega) {
-      connection.release();
       return res
         .status(400)
         .json({ message: "Debe especificar la bodega inicial" });
     }
-    if (!nombre || !String(nombre).trim()) {
-      connection.release();
+
+    const nombreStr = toStrOrNull(nombre);
+    if (!nombreStr) {
       return res.status(400).json({ message: "El nombre es requerido" });
     }
 
     await connection.beginTransaction();
 
-    // ¿Trae código manual?
-    const customCodigo = (bodyCodigo ?? "").trim();
-    let codigoFinal = null;
-
-    if (customCodigo) {
-      // Validar duplicado
-      const [dup] = await connection.query(
-        "SELECT id FROM activos WHERE codigo = ? LIMIT 1",
-        [customCodigo]
+    // Si no te mandan código, lo calculamos de forma segura
+    let codigoStr = toStrOrNull(codigo);
+    if (!codigoStr) {
+      const [nextRows] = await connection.query(
+        // Si usas códigos alfanum, quita el WHERE REGEXP
+        `SELECT COALESCE(MAX(CAST(codigo AS UNSIGNED)), 1000) + 1 AS next
+         FROM activos
+         WHERE codigo REGEXP '^[0-9]+$'
+         FOR UPDATE`
       );
-      if (dup.length > 0) {
-        await connection.rollback();
-        connection.release();
-        return res
-          .status(409)
-          .json({ message: "Ya existe un activo con ese 'codigo'." });
-      }
-      codigoFinal = customCodigo;
-    } else {
-      // Generar consecutivo de forma segura (sin reservar si se cae luego,
-      // pero como estamos dentro de la misma transacción está ok)
-      await connection.query("SET TRANSACTION ISOLATION LEVEL READ COMMITTED");
-
-      // Asegurar fila en sequences y bloquearla
-      await ensureSequenceRow(connection, "activos_codigo", 1000);
-
-      const [[seq]] = await connection.query(
-        "SELECT value FROM sequences WHERE name = 'activos_codigo' FOR UPDATE"
-      );
-
-      const nextVal = Number(seq.value) + 1;
-
-      // Actualizar secuencia
-      await connection.query(
-        "UPDATE sequences SET value = ? WHERE name = 'activos_codigo'",
-        [nextVal]
-      );
-
-      codigoFinal = String(nextVal);
+      codigoStr = String(nextRows[0].next);
     }
 
-    // insertar activo
-    const [result] = await connection.query(
-      "INSERT INTO activos (codigo, nombre, modelo, serial_number, tipo, estatus) VALUES (?, ?, ?, ?, ?, ?)",
-      [codigoFinal, nombre.trim(), modelo, serial_number, tipo, estatus]
+    const [ins] = await connection.query(
+      `INSERT INTO activos (codigo, nombre, modelo, serial_number, tipo, estatus)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [
+        codigoStr,
+        nombreStr,
+        toStrOrNull(modelo),
+        toStrOrNull(serial_number),
+        toStrOrNull(tipo) || "Otro",
+        toStrOrNull(estatus) || "Activo",
+      ]
     );
-    const activoId = result.insertId;
 
-    // insertar ubicación inicial en bodega
+    const activoId = ins.insertId;
+
     await connection.query(
       `INSERT INTO ubicaciones_activos
         (id_activo, tipo_destino, id_bodega, fecha_inicio, motivo, usuario_responsable)
        VALUES (?, 'Bodega', ?, NOW(), 'Ingreso inicial', ?)`,
-      [activoId, id_bodega, usuario_responsable]
+      [activoId, id_bodega, toStrOrNull(usuario_responsable)]
     );
 
     await connection.commit();
 
-    const [[row]] = await connection.query(
-      "SELECT * FROM activos WHERE id = ?",
+    const [rows] = await connection.query(
+      `SELECT * FROM activos WHERE id = ?`,
       [activoId]
     );
-    res.status(201).json(row);
+    res.status(201).json(rows[0]);
   } catch (error) {
     try {
       await connection.rollback();
-    } catch (_) {}
-    if (error.code === "ER_DUP_ENTRY") {
-      return res.status(409).json({ message: "Entrada duplicada." });
+    } catch {}
+    if (error?.code === "ER_DUP_ENTRY") {
+      return res
+        .status(409)
+        .json({ message: "Ya existe un activo con ese 'codigo'." });
     }
     res.status(500).json({ error: error.message });
   } finally {
@@ -263,53 +247,66 @@ export const createActivo = async (req, res) => {
 // ==============================
 export const updateActivo = async (req, res) => {
   const connection = await pool.getConnection();
+  const toStrOrNull = (v) =>
+    v === undefined || v === null ? null : String(v).trim() || null;
+
   try {
     const { id } = req.params;
-    const {
-      codigo,
-      nombre,
-      modelo = null,
-      serial_number = null,
-      tipo = "Otro",
-      estatus = "Activo",
-    } = req.body;
+    const { codigo, nombre, modelo, serial_number, tipo, estatus } =
+      req.body || {};
 
     const [exists] = await connection.query(
-      "SELECT id FROM activos WHERE id = ?",
+      `SELECT * FROM activos WHERE id=?`,
       [id]
     );
-    if (exists.length === 0) {
-      connection.release();
+    if (!exists.length) {
       return res.status(404).json({ message: "Activo no encontrado" });
     }
+    const current = exists[0];
 
-    const [dup] = await connection.query(
-      "SELECT id FROM activos WHERE codigo = ? AND id <> ? LIMIT 1",
-      [codigo, id]
-    );
-    if (dup.length > 0) {
-      connection.release();
-      return res
-        .status(409)
-        .json({ message: "Ya existe un activo con ese 'codigo'." });
+    const newCodigo =
+      codigo === undefined ? current.codigo : toStrOrNull(codigo);
+    const newNombre =
+      nombre === undefined ? current.nombre : toStrOrNull(nombre);
+    const newModelo =
+      modelo === undefined ? current.modelo : toStrOrNull(modelo);
+    const newSerie =
+      serial_number === undefined
+        ? current.serial_number
+        : toStrOrNull(serial_number);
+    const newTipo =
+      tipo === undefined ? current.tipo : toStrOrNull(tipo) || "Otro";
+    const newEstatus =
+      estatus === undefined
+        ? current.estatus
+        : toStrOrNull(estatus) || "Activo";
+
+    if (!newNombre) {
+      return res.status(400).json({ message: "El nombre es requerido" });
     }
 
-    const [result] = await connection.query(
-      `UPDATE activos 
-       SET codigo=?, nombre=?, modelo=?, serial_number=?, tipo=?, estatus=? 
+    if (newCodigo !== current.codigo) {
+      const [dup] = await connection.query(
+        `SELECT id FROM activos WHERE codigo=? AND id<>? LIMIT 1`,
+        [newCodigo, id]
+      );
+      if (dup.length) {
+        return res
+          .status(409)
+          .json({ message: "Ya existe un activo con ese 'codigo'." });
+      }
+    }
+
+    await connection.query(
+      `UPDATE activos
+         SET codigo=?, nombre=?, modelo=?, serial_number=?, tipo=?, estatus=?
        WHERE id=?`,
-      [codigo.trim(), nombre.trim(), modelo, serial_number, tipo, estatus, id]
+      [newCodigo, newNombre, newModelo, newSerie, newTipo, newEstatus, id]
     );
 
-    if (result.affectedRows === 0) {
-      connection.release();
-      return res.status(404).json({ message: "Activo no encontrado" });
-    }
-
-    const [rows] = await connection.query(
-      "SELECT * FROM activos WHERE id = ?",
-      [id]
-    );
+    const [rows] = await connection.query(`SELECT * FROM activos WHERE id=?`, [
+      id,
+    ]);
     res.json(rows[0]);
   } catch (error) {
     res.status(500).json({ error: error.message });
