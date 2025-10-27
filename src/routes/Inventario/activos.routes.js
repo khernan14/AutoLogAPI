@@ -10,6 +10,7 @@ import {
   getActivosEnBodegas,
   getActivosByCliente,
   getActivosGlobal,
+  getNextCodigo,
 } from "../../controllers/Inventario/activos.controller.js";
 
 import {
@@ -21,6 +22,13 @@ const router = Router();
 
 // Activos generales
 router.get("/", authenticate, authorizeByPermisos("ver_activos"), getActivos);
+
+router.get(
+  "/next-code",
+  authenticate,
+  authorizeByPermisos("crear_activos"),
+  getNextCodigo
+);
 
 // rutas específicas primero
 router.get(

@@ -12,6 +12,60 @@ const LOC_ACTUAL_SQL = `
   LIMIT 1
 `;
 
+// Helper para asegurar la tabla sequences y devulve la fila (creada sino existe)
+async function ensureSequenceRow(conn, name, baseFromActivos = 1000) {
+  // 1) Crear tabla si no existe
+  await conn.query(`
+    CREATE TABLE IF NOT EXISTS sequences (
+      name  VARCHAR(100) PRIMARY KEY,
+      value BIGINT NOT NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  `);
+
+  // 2) Intentar leer fila
+  const [[row]] = await conn.query(
+    "SELECT value FROM sequences WHERE name = ?",
+    [name]
+  );
+
+  if (row) return row;
+
+  // 3) Si no existe, alinear con activos (máximo código numérico o base)
+  const [[mx]] = await conn.query(
+    `
+    SELECT GREATEST(
+      COALESCE(MAX(CAST(REGEXP_REPLACE(codigo, '[^0-9]', '') AS UNSIGNED)), ?),
+      ?
+    ) AS maxv
+    FROM activos
+  `,
+    [baseFromActivos, baseFromActivos]
+  );
+
+  const base = mx?.maxv ?? baseFromActivos;
+
+  await conn.query("INSERT INTO sequences (name, value) VALUES (?, ?)", [
+    name,
+    base,
+  ]);
+
+  return { value: base };
+}
+
+export const getNextCodigo = async (_req, res) => {
+  const conn = await pool.getConnection();
+  try {
+    const seq = await ensureSequenceRow(conn, "activos_codigo", 1000);
+    return res.json({ next: String(Number(seq.value) + 1) });
+  } catch (err) {
+    return res
+      .status(500)
+      .json({ error: err?.message || "No se pudo obtener el próximo código" });
+  } finally {
+    conn.release();
+  }
+};
+
 // ==============================
 // Listar todos los activos (con ubicación actual resumida)
 // ==============================
@@ -24,7 +78,7 @@ export const getActivos = async (_req, res) => {
         (SELECT id_cliente_site FROM (${LOC_ACTUAL_SQL}) AS loc) AS ubicacion_cliente_site,
         (SELECT id_bodega FROM (${LOC_ACTUAL_SQL}) AS loc) AS ubicacion_bodega
       FROM activos a
-      ORDER BY a.codigo DESC
+      ORDER BY CAST(REGEXP_REPLACE(a.codigo, '[^0-9]', '') AS UNSIGNED) DESC
     `);
     res.json(rows);
   } catch (error) {
@@ -105,7 +159,7 @@ export const createActivo = async (req, res) => {
   const connection = await pool.getConnection();
   try {
     const {
-      codigo,
+      codigo: bodyCodigo,
       nombre,
       modelo = null,
       serial_number = null,
@@ -121,25 +175,58 @@ export const createActivo = async (req, res) => {
         .status(400)
         .json({ message: "Debe especificar la bodega inicial" });
     }
+    if (!nombre || !String(nombre).trim()) {
+      connection.release();
+      return res.status(400).json({ message: "El nombre es requerido" });
+    }
 
     await connection.beginTransaction();
 
-    // evitar duplicado de codigo
-    const [dup] = await connection.query(
-      "SELECT id FROM activos WHERE codigo = ? LIMIT 1",
-      [codigo]
-    );
-    if (dup.length > 0) {
-      connection.release();
-      return res
-        .status(409)
-        .json({ message: "Ya existe un activo con ese 'codigo'." });
+    // ¿Trae código manual?
+    const customCodigo = (bodyCodigo ?? "").trim();
+    let codigoFinal = null;
+
+    if (customCodigo) {
+      // Validar duplicado
+      const [dup] = await connection.query(
+        "SELECT id FROM activos WHERE codigo = ? LIMIT 1",
+        [customCodigo]
+      );
+      if (dup.length > 0) {
+        await connection.rollback();
+        connection.release();
+        return res
+          .status(409)
+          .json({ message: "Ya existe un activo con ese 'codigo'." });
+      }
+      codigoFinal = customCodigo;
+    } else {
+      // Generar consecutivo de forma segura (sin reservar si se cae luego,
+      // pero como estamos dentro de la misma transacción está ok)
+      await connection.query("SET TRANSACTION ISOLATION LEVEL READ COMMITTED");
+
+      // Asegurar fila en sequences y bloquearla
+      await ensureSequenceRow(connection, "activos_codigo", 1000);
+
+      const [[seq]] = await connection.query(
+        "SELECT value FROM sequences WHERE name = 'activos_codigo' FOR UPDATE"
+      );
+
+      const nextVal = Number(seq.value) + 1;
+
+      // Actualizar secuencia
+      await connection.query(
+        "UPDATE sequences SET value = ? WHERE name = 'activos_codigo'",
+        [nextVal]
+      );
+
+      codigoFinal = String(nextVal);
     }
 
     // insertar activo
     const [result] = await connection.query(
       "INSERT INTO activos (codigo, nombre, modelo, serial_number, tipo, estatus) VALUES (?, ?, ?, ?, ?, ?)",
-      [codigo.trim(), nombre.trim(), modelo, serial_number, tipo, estatus]
+      [codigoFinal, nombre.trim(), modelo, serial_number, tipo, estatus]
     );
     const activoId = result.insertId;
 
@@ -153,11 +240,11 @@ export const createActivo = async (req, res) => {
 
     await connection.commit();
 
-    const [rows] = await connection.query(
+    const [[row]] = await connection.query(
       "SELECT * FROM activos WHERE id = ?",
       [activoId]
     );
-    res.status(201).json(rows[0]);
+    res.status(201).json(row);
   } catch (error) {
     try {
       await connection.rollback();
