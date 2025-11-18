@@ -460,7 +460,7 @@ export const getUbicacionActual = async (req, res) => {
 };
 
 /* ==============================
-   Historial de ubicaciones
+   Historial de ubicaciones (USANDO SNAPSHOTS)
 ============================== */
 export const getHistorialUbicaciones = async (req, res) => {
   try {
@@ -468,6 +468,7 @@ export const getHistorialUbicaciones = async (req, res) => {
     const [rows] = await pool.query(
       `SELECT ua.*, 
               cs.nombre AS site_nombre, 
+              cs.activo AS site_activo,
               c.nombre  AS cliente_nombre, 
               b.nombre  AS bodega_nombre
        FROM ubicaciones_activos ua
