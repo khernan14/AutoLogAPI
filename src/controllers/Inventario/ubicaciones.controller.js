@@ -1,7 +1,7 @@
-// controllers/Inventario/ubicaciones.controller.js
+// src/controllers/inventario/ubicaciones.controller.js
 import pool from "../../config/connectionToSql.js";
 
-// ✅ Validar destino y FKs (ahora incluye Empleado)
+// ✅ Validar destino y FKs (ahora incluye Empleado y que el site esté activo)
 async function validateDestino({
   tipo_destino,
   id_cliente_site,
@@ -22,10 +22,14 @@ async function validateDestino({
         msg: "id_cliente_site es requerido para destino Cliente",
       };
     const [r] = await pool.query(
-      "SELECT id FROM clientes_sites WHERE id = ? LIMIT 1",
+      "SELECT id FROM clientes_sites WHERE id = ? AND activo = 1 LIMIT 1",
       [id_cliente_site]
     );
-    if (r.length === 0) return { ok: false, msg: "id_cliente_site no existe" };
+    if (r.length === 0)
+      return {
+        ok: false,
+        msg: "id_cliente_site no existe o está inactivo",
+      };
   }
 
   if (tipo_destino === "Bodega") {
@@ -80,6 +84,7 @@ function destinoFields(
 }
 
 // ✅ Mover activo: cierra ubicación anterior y abre una nueva (transacción)
+//    AHORA guarda snapshots de cliente/site cuando el destino es Cliente
 export const moverActivo = async (req, res) => {
   const connection = await pool.getConnection();
   try {
@@ -103,7 +108,7 @@ export const moverActivo = async (req, res) => {
       return res.status(404).json({ message: "Activo no encontrado" });
     }
 
-    // validar destino
+    // validar destino (usa pool - fuera de la transacción está bien)
     const v = await validateDestino({
       tipo_destino,
       id_cliente_site,
@@ -125,21 +130,44 @@ export const moverActivo = async (req, res) => {
       [id_activo]
     );
 
-    // abrir nueva ubicación
+    // Campos de destino normalizados
     const f = destinoFields(tipo_destino, {
       id_cliente_site,
       id_bodega,
       id_empleado,
     });
 
+    // 👇 NUEVO: obtener nombres para snapshot cuando el destino es Cliente
+    let clienteNombreSnapshot = null;
+    let siteNombreSnapshot = null;
+
+    if (tipo_destino === "Cliente" && f.id_cliente_site) {
+      const [[rowSite]] = await connection.query(
+        `SELECT cs.nombre AS site_nombre,
+                c.nombre  AS cliente_nombre
+         FROM clientes_sites cs
+         JOIN clientes c ON c.id = cs.id_cliente
+         WHERE cs.id = ?`,
+        [f.id_cliente_site]
+      );
+      if (!rowSite) {
+        throw new Error("Site no encontrado al generar snapshot");
+      }
+      clienteNombreSnapshot = rowSite.cliente_nombre;
+      siteNombreSnapshot = rowSite.site_nombre;
+    }
+
+    // abrir nueva ubicación (con snapshots)
     const [ins] = await connection.query(
       `INSERT INTO ubicaciones_activos
-       (id_activo, tipo_destino, id_cliente_site, id_bodega, id_empleado, fecha_inicio, motivo, usuario_responsable)
-       VALUES (?, ?, ?, ?, ?, NOW(), ?, ?)`,
+       (id_activo, tipo_destino, id_cliente_site, cliente_nombre_snapshot, site_nombre_snapshot, id_bodega, id_empleado, fecha_inicio, motivo, usuario_responsable)
+       VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?)`,
       [
         id_activo,
         tipo_destino,
         f.id_cliente_site,
+        clienteNombreSnapshot,
+        siteNombreSnapshot,
         f.id_bodega,
         f.id_empleado,
         motivo,
@@ -152,24 +180,23 @@ export const moverActivo = async (req, res) => {
     // devolver registro recién creado con nombres (incluye empleado/usuario)
     const [row] = await connection.query(
       `SELECT ua.*,
-              cs.nombre   AS site_nombre,
-              c.nombre    AS cliente_nombre,
+              COALESCE(ua.site_nombre_snapshot, cs.nombre)    AS site_nombre,
+              COALESCE(ua.cliente_nombre_snapshot, c.nombre) AS cliente_nombre,
               b.nombre    AS bodega_nombre,
               e.id        AS empleado_id,
               u.nombre    AS empleado_nombre
        FROM ubicaciones_activos ua
        LEFT JOIN clientes_sites cs ON ua.id_cliente_site = cs.id
-       LEFT JOIN clientes c        ON cs.id_cliente = c.id
-       LEFT JOIN bodegas b         ON ua.id_bodega = b.id
-       LEFT JOIN empleados e       ON ua.id_empleado = e.id
-       LEFT JOIN usuarios u        ON u.id_usuario = e.id_usuario
+       LEFT JOIN clientes c        ON cs.id_cliente      = c.id
+       LEFT JOIN bodegas b         ON ua.id_bodega       = b.id
+       LEFT JOIN empleados e       ON ua.id_empleado     = e.id
+       LEFT JOIN usuarios u        ON u.id_usuario       = e.id_usuario
        WHERE ua.id = ?`,
       [ins.insertId]
     );
 
     res.status(201).json(row[0]);
   } catch (error) {
-    // ❗ rollback correcto en el mismo connection
     try {
       await connection.rollback();
     } catch {}
@@ -191,23 +218,23 @@ export const moverActivo = async (req, res) => {
   }
 };
 
-// ✅ Movimientos por activo (historial) — ahora incluye datos del empleado
+// ✅ Movimientos por activo (historial) — ahora incluye snapshots
 export const getMovimientosByActivo = async (req, res) => {
   try {
     const { id_activo } = req.params;
     const [rows] = await pool.query(
       `SELECT ua.*,
-              cs.nombre   AS site_nombre,
-              c.nombre    AS cliente_nombre,
+              COALESCE(ua.site_nombre_snapshot, cs.nombre)    AS site_nombre,
+              COALESCE(ua.cliente_nombre_snapshot, c.nombre) AS cliente_nombre,
               b.nombre    AS bodega_nombre,
               e.id        AS empleado_id,
               u.nombre    AS empleado_nombre
        FROM ubicaciones_activos ua
        LEFT JOIN clientes_sites cs ON ua.id_cliente_site = cs.id
-       LEFT JOIN clientes c        ON cs.id_cliente = c.id
-       LEFT JOIN bodegas b         ON ua.id_bodega = b.id
-       LEFT JOIN empleados e       ON ua.id_empleado = e.id
-       LEFT JOIN usuarios u        ON u.id_usuario = e.id_usuario
+       LEFT JOIN clientes c        ON cs.id_cliente      = c.id
+       LEFT JOIN bodegas b         ON ua.id_bodega       = b.id
+       LEFT JOIN empleados e       ON ua.id_empleado     = e.id
+       LEFT JOIN usuarios u        ON u.id_usuario       = e.id_usuario
        WHERE ua.id_activo = ?
        ORDER BY ua.fecha_inicio DESC`,
       [id_activo]
