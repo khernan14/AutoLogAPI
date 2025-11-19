@@ -82,21 +82,55 @@ export const sendCommentsEmail = async (req, res) => {
 
 export const sendResetPasswordEmail = async (req, res) => {
   const { email } = req.body;
-  console.log("📌 Email de reseteo de contraseña:", email);
+  console.log("📩 [/api/mail/forgot-password] email recibido:", email);
 
   try {
-    // 1. Buscar el usuario por email
+    // ---- 0) Sanity check envs en producción ----
+    console.log("🔎 SMTP envs (prod):", {
+      MAIL_HOST: process.env.MAIL_HOST,
+      MAIL_PORT: process.env.MAIL_PORT,
+      RECOVERY_USER: process.env.RECOVERY_USER,
+    });
+
+    if (!email) {
+      console.warn("⚠️ No se envió email en el body");
+      return res
+        .status(400)
+        .json({ message: "Debes indicar un correo electrónico." });
+    }
+
+    // 1) Buscar usuario por email
     const [users] = await pool.query(
       "SELECT id_usuario, nombre FROM usuarios WHERE email = ?",
       [email]
     );
     const user = users[0];
 
-    // Verificar cuántos tokens ha solicitado en la última hora
+    console.log("👤 Usuario encontrado para reset?", !!user, user?.id_usuario);
+
+    // Por seguridad, aunque no exista el usuario se devuelve 200
+    if (!user) {
+      console.log(
+        "ℹ️ Email no registrado, respondiendo 200 genérico (no se enviará correo)."
+      );
+      return res.status(200).json({
+        message:
+          "Si tu correo está registrado, recibirás un enlace para restablecer tu contraseña.",
+      });
+    }
+
+    // 2) Rate limit: cuántos tokens en la última hora
     const [recentRequests] = await pool.query(
-      `SELECT COUNT(*) as count FROM password_reset_tokens
-   WHERE user_id = ? AND created_at > DATE_SUB(NOW(), INTERVAL 1 HOUR)`,
+      `SELECT COUNT(*) as count 
+       FROM password_reset_tokens
+       WHERE user_id = ? 
+         AND created_at > DATE_SUB(NOW(), INTERVAL 1 HOUR)`,
       [user.id_usuario]
+    );
+
+    console.log(
+      "⏱  Solicitudes recientes de reset:",
+      recentRequests?.[0]?.count
     );
 
     if (recentRequests[0].count >= 5) {
@@ -106,71 +140,80 @@ export const sendResetPasswordEmail = async (req, res) => {
       });
     }
 
-    if (!user) {
-      // Importante: Por razones de seguridad, no revelar si el correo existe o no.
-      // Siempre devuelve un mensaje genérico.
-      return res.status(200).json({
-        message:
-          "Si tu correo está registrado, recibirás un enlace para restablecer tu contraseña.",
-      });
-    }
+    // 3) Generar token y fecha de expiración
+    const resetToken = crypto.randomBytes(32).toString("hex");
+    const now = new Date(Date.now() + 3600000); // +1h
+    const expiresAt = now.toISOString().slice(0, 19).replace("T", " ");
 
-    // 2. Generar un token único y seguro
-    const resetToken = crypto.randomBytes(32).toString("hex"); // Genera un token aleatorio
-    // Calcular la fecha de expiración (ej: 1 hora a partir de ahora)
-    const now = new Date(Date.now() + 3600000); // 1 hora después
-    const expiresAt = now.toISOString().slice(0, 19).replace("T", " "); // 👈 así MySQL lo acepta
+    console.log("🔑 Token generado:", resetToken.slice(0, 8) + "…");
+    console.log("⏰ Expira en:", expiresAt);
 
-    // Eliminar tokens anteriores (opcional pero recomendado)
+    // 4) Borrar tokens anteriores y guardar el nuevo
     await pool.query("DELETE FROM password_reset_tokens WHERE user_id = ?", [
       user.id_usuario,
     ]);
-
-    // 3. Guardar el token en la tabla `password_reset_tokens`
     await pool.query(
       "INSERT INTO password_reset_tokens (user_id, token, expires_at) VALUES (?, ?, ?)",
       [user.id_usuario, resetToken, expiresAt]
     );
 
-    // 4. Construir la URL de restablecimiento para el frontend
-    // Asegúrate de que process.env.FRONTEND_URL esté configurado en tu .env del backend
-    const resetUrl = `${process.env.FRONTEND_URL}/auth/reset-password?token=${resetToken}`;
+    // 5) Construir URL de reset
+    const frontendUrl = process.env.FRONTEND_URL;
+    console.log("🌐 FRONTEND_URL =", frontendUrl);
 
-    // 5. Renderizar el template HTML del correo
+    const resetUrl = `${frontendUrl}/auth/reset-password?token=${resetToken}`;
+    console.log("🔗 URL de reset generada:", resetUrl);
+
+    // 6) Renderizar template
     const html = renderHtmlTemplate("resetPassword.html", {
-      nombre: user.nombre, // Pasamos el nombre del usuario al template
-      url: resetUrl, // Pasamos la URL de restablecimiento al template
+      nombre: user.nombre,
+      url: resetUrl,
     });
 
-    // 6. Enviar el correo electrónico utilizando tu servicio sendMail
+    // 7) Enviar correo (fromType: recovery)
+    console.log("📨 Llamando a sendMail(recovery)…");
     const emailResult = await sendMail({
       to: email,
-      subject: "Restablecimiento de Contraseña en AutoLog", // Asunto claro
+      subject: "Restablecimiento de Contraseña en AutoLog",
       html,
-      fromType: "recovery", // Usar el alias de correo 'recovery'
+      fromType: "recovery",
+    });
+
+    console.log("📬 Resultado sendMail:", {
+      success: emailResult.success,
+      messageId: emailResult.messageId,
+      error: emailResult.error
+        ? {
+            message: emailResult.error.message,
+            code: emailResult.error.code,
+            command: emailResult.error.command,
+          }
+        : null,
     });
 
     if (!emailResult.success) {
-      console.error(
-        "Fallo al enviar el correo de restablecimiento:",
-        emailResult.error
-      );
+      // 👇 deja esto así mientras debugueas, luego puedes hacerlo más genérico
+      console.error("❌ Error al enviar correo de reset:", emailResult.error);
       return res.status(500).json({
         message: "No se pudo enviar el correo de restablecimiento.",
+        // TEMPORAL: info extra para que la veas en el front (quítalo después)
+        debug: {
+          errorMessage: emailResult.error?.message,
+          errorCode: emailResult.error?.code,
+        },
       });
     }
 
-    res.status(200).json({
+    return res.status(200).json({
       message:
         "Si tu correo está registrado, recibirás un enlace para restablecer tu contraseña.",
     });
   } catch (error) {
-    console.error(
-      "Error en la solicitud de restablecimiento de contraseña (mail.controller):",
-      error
-    );
-    res.status(500).json({
+    console.error("💥 sendResetPasswordEmail error:", error);
+    return res.status(500).json({
       message: "Error interno del servidor al procesar la solicitud.",
+      // TEMPORAL para debug
+      debug: error.message,
     });
   }
 };
