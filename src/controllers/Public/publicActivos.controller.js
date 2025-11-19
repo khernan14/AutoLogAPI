@@ -21,7 +21,7 @@ function mapPublicActivo({ activo, ubicacion, asignacion }) {
     codigo: activo.codigo,
     nombre: activo.nombre,
     modelo: activo.modelo,
-    serial_number: activo.serial_number, // quítalo si no quieres exponerlo
+    serial_number: activo.serial_number,
     tipo: activo.tipo,
     estatus: activo.estatus,
     fecha_registro: activo.fecha_registro,
@@ -52,6 +52,7 @@ function mapPublicActivo({ activo, ubicacion, asignacion }) {
     meta: {
       isEnCliente,
       isEnBodega: !!ubicacion && ubicacion.tipo_destino === "Bodega",
+      queryVersion: "v2-ultima-ubicacion", // 👈 DEBUG
     },
   };
 }
@@ -113,19 +114,27 @@ export const getPublicActivoByCodigo = async (req, res) => {
 
     // 2) Ubicación actual
     const [ubicRows] = await pool.query(
-      `SELECT ua.*, cs.nombre AS site_nombre, c.id AS cliente_id, c.nombre AS cliente_nombre,
-              b.nombre AS bodega_nombre, img.url AS cliente_logo_url
-       FROM ubicaciones_activos ua
-       LEFT JOIN clientes_sites cs ON ua.id_cliente_site = cs.id
-       LEFT JOIN clientes c        ON cs.id_cliente = c.id
-       LEFT JOIN images  img       ON c.logo_image_id = img.id_image
-       LEFT JOIN bodegas b         ON ua.id_bodega = b.id
-       WHERE ua.id_activo = ?
-         AND ua.fecha_fin IS NULL
-       ORDER BY ua.fecha_inicio DESC
-       LIMIT 1`,
+      `SELECT
+      ua.*,
+      COALESCE(ua.site_nombre_snapshot, cs.nombre)      AS site_nombre,
+      COALESCE(ua.cliente_nombre_snapshot, c.nombre)    AS cliente_nombre,
+      b.nombre                                          AS bodega_nombre,
+      img.url                                           AS cliente_logo_url
+      FROM ubicaciones_activos ua
+      LEFT JOIN clientes_sites cs ON ua.id_cliente_site = cs.id
+      LEFT JOIN clientes c        ON cs.id_cliente      = c.id
+      LEFT JOIN images  img       ON c.logo_image_id    = img.id_image
+      LEFT JOIN bodegas b         ON ua.id_bodega       = b.id
+      WHERE ua.id = (
+        SELECT u2.id
+        FROM ubicaciones_activos u2
+        WHERE u2.id_activo = ?
+        ORDER BY u2.fecha_inicio DESC, u2.id DESC
+        LIMIT 1
+      )`,
       [activo.id]
     );
+
     const ubicacion = ubicRows[0] || null;
 
     // 3) Asignación vigente
