@@ -155,8 +155,9 @@ export const sendResetPasswordEmail = async (req, res) => {
         "Fallo al enviar el correo de restablecimiento:",
         emailResult.error
       );
-      // Puedes optar por no devolver un error HTTP 500 aquí para no revelar el fallo del correo al usuario
-      // pero sí loguearlo. El mensaje al usuario final sigue siendo genérico por seguridad.
+      return res.status(500).json({
+        message: "No se pudo enviar el correo de restablecimiento.",
+      });
     }
 
     res.status(200).json({
@@ -239,7 +240,7 @@ export const sendNotificationRegreso = async (req, res) => {
 
     if (
       (!to || !employeeName || !vehicleName || !supervisorName,
-        !estacionamiento)
+      !estacionamiento)
     ) {
       return res
         .status(400)
