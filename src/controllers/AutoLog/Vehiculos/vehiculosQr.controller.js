@@ -4,7 +4,7 @@ import QRCode from "qrcode";
 import { signPublicLink, verifyPublicLink } from "../../../utils/signedLink.js";
 import logger from "../../../utils/logger.js";
 
-const APP_BASE = (process.env.APP_BASE_URL || "http://localhost:5173").replace(
+const APP_BASE = (process.env.FRONTEND_URL || "http://localhost:5173").replace(
   /\/$/,
   ""
 );
