@@ -42,6 +42,9 @@ import plantillasRoutes from "./src/routes/Notificaciones/plantillas.routes.js";
 import gruposRoutes from "./src/routes/Notificaciones/grupos.routes.js";
 import eventosRoutes from "./src/routes/Notificaciones/eventos.routes.js";
 
+// Mensajeria
+import whatsappRoutes from "./src/routes/Mensajeria/whatsapp.routes.js";
+
 // Viaticos
 // import viaticosRoutes from "./src/routes/Finanzas/viaticos.routes.js";
 
@@ -191,6 +194,9 @@ app.use("/api/notifications/config", configRoutes);
 app.use("/api/notificaciones/grupos", gruposRoutes);
 app.use("/api/notificaciones/plantillas", plantillasRoutes);
 app.use("/api/notificaciones/eventos", eventosRoutes);
+
+// Mensajeria
+app.use("/api/whatsapp", whatsappRoutes);
 
 // Viaticos
 // app.use("/api/viaticos", viaticosRoutes);
