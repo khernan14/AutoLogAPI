@@ -12,6 +12,11 @@ import {
   authenticate,
   authorizeByPermisos,
 } from "../../middleware/auth.middleware.js";
+import {
+  getQRImageForVehiculo,
+  issueRegistroLinkForVehiculo,
+  resolveVehiculoFromQrToken,
+} from "../../controllers/AutoLog/Vehiculos/vehiculosQr.controller.js";
 
 const router = express.Router();
 
@@ -36,6 +41,27 @@ router.get(
   authenticate,
   authorizeByPermisos("ver_vehiculos"),
   getVehiculos
+);
+
+router.get(
+  "/:id_vehiculo/registro/link",
+  authenticate,
+  authorizeByPermisos("crear_QR"),
+  issueRegistroLinkForVehiculo
+);
+
+router.get(
+  "/:id_vehiculo/registro/qr.png",
+  authenticate,
+  authorizeByPermisos("crear_QR"),
+  getQRImageForVehiculo
+);
+
+router.get(
+  "/registro/resolve",
+  authenticate,
+  authorizeByPermisos("crear_QR"),
+  resolveVehiculoFromQrToken
 );
 
 /**
