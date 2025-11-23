@@ -200,18 +200,26 @@ export const moverActivo = async (req, res) => {
     try {
       await connection.rollback();
     } catch {}
-    // Errores comunes de integridad: triggers y unique de "abierto"
+
     if (error && error.code === "ER_SIGNAL_EXCEPTION") {
       return res
         .status(400)
         .json({ message: error.sqlMessage || "Validación de destino falló" });
     }
+
     if (error && error.code === "ER_DUP_ENTRY") {
-      // índice único (id_activo, abierto) impide dos ubicaciones abiertas
       return res
         .status(409)
         .json({ message: "El activo ya tiene una ubicación abierta" });
     }
+
+    if (error && error.code === "ER_LOCK_DEADLOCK") {
+      return res.status(503).json({
+        message:
+          "No se pudo completar el movimiento por bloqueo de registros. Intenta de nuevo.",
+      });
+    }
+
     res.status(500).json({ error: error.message });
   } finally {
     connection.release();
