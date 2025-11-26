@@ -43,6 +43,8 @@ router.get(
   getVehiculos
 );
 
+router.get("/public", getVehiculos);
+
 router.get(
   "/:id_vehiculo/registro/link",
   authenticate,
