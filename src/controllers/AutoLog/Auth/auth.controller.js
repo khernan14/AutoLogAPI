@@ -129,7 +129,6 @@ export const login = async (req, res) => {
       return sendError(res, 400, "Credenciales inválidas");
     }
 
-    // ✅ Parametrizado; NO concatenar jamás
     const [rows] = await pool.execute(
       "CALL gestion_usuarios('Login', NULL, NULL, NULL, ?, NULL, NULL, NULL, NULL, NULL, NULL)",
       [username]
@@ -141,7 +140,6 @@ export const login = async (req, res) => {
     const ok = await bcrypt.compare(String(password), user.password);
     if (!ok) return sendError(res, 401, "Credenciales inválidas");
 
-    // Permisos del usuario (✅ parametrizado)
     const [permisosRows] = await pool.execute(
       `SELECT p.nombre
        FROM usuario_permisos up
@@ -154,7 +152,7 @@ export const login = async (req, res) => {
     const token = jwt.sign(
       { id: user.id_usuario, rol: user.rol },
       process.env.JWT_SECRET,
-      { expiresIn: "1h" }
+      { expiresIn: "12h" }
     );
 
     return res.json({
@@ -163,7 +161,7 @@ export const login = async (req, res) => {
       rol: user.rol,
       nombre: user.nombre,
       id: user.id_usuario,
-      id_empleado: user.id, // viene del JOIN con empleados en el SP
+      id_empleado: user.id,
       email: user.email,
       permisos,
     });
