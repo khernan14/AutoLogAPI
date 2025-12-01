@@ -129,6 +129,7 @@ export const login = async (req, res) => {
       return sendError(res, 400, "Credenciales inválidas");
     }
 
+    // Llamada a SP de login (tu SP devuelve el usuario con campos incluyendo password)
     const [rows] = await pool.execute(
       "CALL gestion_usuarios('Login', NULL, NULL, NULL, ?, NULL, NULL, NULL, NULL, NULL, NULL)",
       [username]
@@ -140,6 +141,7 @@ export const login = async (req, res) => {
     const ok = await bcrypt.compare(String(password), user.password);
     if (!ok) return sendError(res, 401, "Credenciales inválidas");
 
+    // Obtener permisos desde BD (igual que antes)
     const [permisosRows] = await pool.execute(
       `SELECT p.nombre
        FROM usuario_permisos up
@@ -149,15 +151,31 @@ export const login = async (req, res) => {
     );
     const permisos = permisosRows.map((p) => p.nombre);
 
+    // Obtener token_version del usuario si existe en la tabla (si no existe, default 0)
+    // Si no tienes la columna token_version, considera agregarla con la migración indicada en README abajo.
+    const tokenVersion =
+      typeof user.token_version !== "undefined"
+        ? Number(user.token_version)
+        : 0;
+
+    // Firmar token: mantenlo minimal (no incluir permisos) pero incluimos tokenVersion para invalidación.
     const token = jwt.sign(
-      { id: user.id_usuario, rol: user.rol },
+      { id: user.id_usuario, rol: user.rol, tokenVersion },
       process.env.JWT_SECRET,
       { expiresIn: "12h" }
     );
 
+    // Poner cookie httpOnly (no enviar token en el body)
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+      maxAge: 12 * 60 * 60 * 1000, // 12 horas
+    });
+
+    // Devolver sólo datos públicos actualizados desde BD (sin token)
     return res.json({
       message: "Inicio de sesión exitoso",
-      token,
       rol: user.rol,
       nombre: user.nombre,
       id: user.id_usuario,
@@ -167,6 +185,73 @@ export const login = async (req, res) => {
     });
   } catch (error) {
     console.error("login error:", error);
+    return sendError(res, 500, "Error interno");
+  }
+};
+
+// Endpoint /me: obtiene datos actualizados del usuario desde BD (lee cookie o header via middleware)
+export const me = async (req, res) => {
+  try {
+    // Si authenticate middleware ya adjunta req.user con id, úsalo.
+    // Pero soportamos también caso donde no se ejecuta el middleware: leer token de cookie aquí.
+    let userId = req.user?.id;
+
+    if (!userId) {
+      // intentar leer token de cookie/manual (fallback)
+      const token = req.cookies?.token || null;
+      if (!token) return sendError(res, 401, "No autenticado");
+      let payload;
+      try {
+        payload = jwt.verify(token, process.env.JWT_SECRET);
+      } catch (err) {
+        return sendError(res, 401, "Token inválido o expirado");
+      }
+      userId = payload.id;
+    }
+
+    // Obtener usuario fresco desde BD usando tu SP 'Perfil' (como ya tenías)
+    const [rows] = await pool.execute(
+      "CALL gestion_usuarios('Perfil', ?, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)",
+      [userId]
+    );
+    const user = rows?.[0]?.[0] || null;
+    if (!user) return sendError(res, 401, "No autenticado");
+
+    const [permisosRows] = await pool.execute(
+      `SELECT p.nombre
+       FROM usuario_permisos up
+       INNER JOIN permisos p ON up.permiso_id = p.id
+       WHERE up.id_usuario = ?`,
+      [user.id_usuario]
+    );
+    const permisos = permisosRows.map((p) => p.nombre);
+
+    return res.json({
+      rol: user.rol,
+      nombre: user.nombre,
+      id: user.id_usuario,
+      id_empleado: user.id,
+      email: user.email,
+      permisos,
+      tokenVersion: user.token_version ?? 0, // opcional exponer para debugging
+    });
+  } catch (err) {
+    console.error("me error:", err);
+    return sendError(res, 500, "Error interno");
+  }
+};
+
+// Logout: borrar cookie httpOnly
+export const logout = (req, res) => {
+  try {
+    res.clearCookie("token", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+    });
+    return res.json({ message: "Sesión cerrada" });
+  } catch (err) {
+    console.error("logout error:", err);
     return sendError(res, 500, "Error interno");
   }
 };

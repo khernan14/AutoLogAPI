@@ -17,6 +17,8 @@ import {
   restoreUser,
   resetPassword,
   getEmailSupervisor,
+  me,
+  logout,
 } from "../../controllers/AutoLog/Auth/auth.controller.js";
 import {
   authenticate,
@@ -135,6 +137,12 @@ router.post(
  *         description: Credenciales inválidas
  */
 router.post("/login", login);
+
+// Me -> devuelve datos actualizados del usuario
+router.get("/me", authenticate, me);
+
+// Logout -> borra cookie
+router.post("/logout", logout);
 
 router.put(
   "/usuarios/:id",

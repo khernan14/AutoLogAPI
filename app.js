@@ -1,5 +1,6 @@
 // app.js
 import express from "express";
+import cookieParser from "cookie-parser";
 import cors from "cors";
 import "dotenv/config";
 import pool from "./src/config/connectionToSql.js";
@@ -100,6 +101,7 @@ app.options("*", cors(corsOptions));
 // Body parsers (con límite)
 app.use(express.json({ limit: "20kb" }));
 app.use(express.urlencoded({ extended: true, limit: "20kb" }));
+app.use(cookieParser());
 
 // 🔹 Log de cada request/respuesta
 app.use(requestLogger);
