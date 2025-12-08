@@ -46,6 +46,9 @@ import eventosRoutes from "./src/routes/Notificaciones/eventos.routes.js";
 // Mensajeria
 import whatsappRoutes from "./src/routes/Mensajeria/whatsapp.routes.js";
 
+// Settings
+import settingsRoutes from "./src/routes/AutoLog/settings.routes.js";
+
 // Viaticos
 // import viaticosRoutes from "./src/routes/Finanzas/viaticos.routes.js";
 
@@ -199,6 +202,9 @@ app.use("/api/notificaciones/eventos", eventosRoutes);
 
 // Mensajeria
 app.use("/api/whatsapp", whatsappRoutes);
+
+// Settings
+app.use("/api/settings", settingsRoutes);
 
 // Viaticos
 // app.use("/api/viaticos", viaticosRoutes);

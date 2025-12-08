@@ -1,3 +1,5 @@
+import { authenticator } from "otplib";
+import { sendLoginAlert } from "../../../services/auth/SecurityService.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import pool from "../../../config/connectionToSql.js";
@@ -124,12 +126,11 @@ export const register = async (req, res) => {
 // Inicio de sesión
 export const login = async (req, res) => {
   try {
-    const { username, password } = req.body ?? {};
+    const { username, password, code } = req.body ?? {};
     if (!username || !password) {
       return sendError(res, 400, "Credenciales inválidas");
     }
 
-    // Llamada a SP de login (tu SP devuelve el usuario con campos incluyendo password)
     const [rows] = await pool.execute(
       "CALL gestion_usuarios('Login', NULL, NULL, NULL, ?, NULL, NULL, NULL, NULL, NULL, NULL)",
       [username]
@@ -141,39 +142,75 @@ export const login = async (req, res) => {
     const ok = await bcrypt.compare(String(password), user.password);
     if (!ok) return sendError(res, 401, "Credenciales inválidas");
 
-    // Obtener permisos desde BD (igual que antes)
+    // === LÓGICA 2FA ===
+    // 1. Verificar si tiene 2FA habilitado en DB (columna nueva)
+    if (user.tfa_enabled === 1) {
+      if (!code) {
+        return res.json({
+          require_2fa: true,
+          message: "Se requiere código de verificación",
+          temp_token: jwt.sign(
+            { id: user.id_usuario, partial: true },
+            process.env.JWT_SECRET,
+            { expiresIn: "5m" }
+          ),
+        });
+      }
+
+      // Si mandó código, verificarlo
+      const isValid = authenticator.check(code, user.tfa_secret);
+      if (!isValid) {
+        return sendError(res, 401, "Código 2FA incorrecto");
+      }
+    }
+
+    // === FIN LÓGICA 2FA (Si pasa, generamos token real) ===
+
+    // Obtener permisos
     const [permisosRows] = await pool.execute(
-      `SELECT p.nombre
-       FROM usuario_permisos up
-       INNER JOIN permisos p ON up.permiso_id = p.id
-       WHERE up.id_usuario = ?`,
+      `SELECT p.nombre FROM usuario_permisos up INNER JOIN permisos p ON up.permiso_id = p.id WHERE up.id_usuario = ?`,
       [user.id_usuario]
     );
     const permisos = permisosRows.map((p) => p.nombre);
-
-    // Obtener token_version del usuario si existe en la tabla (si no existe, default 0)
-    // Si no tienes la columna token_version, considera agregarla con la migración indicada en README abajo.
     const tokenVersion =
       typeof user.token_version !== "undefined"
         ? Number(user.token_version)
         : 0;
 
-    // Firmar token: mantenlo minimal (no incluir permisos) pero incluimos tokenVersion para invalidación.
     const token = jwt.sign(
       { id: user.id_usuario, rol: user.rol, tokenVersion },
       process.env.JWT_SECRET,
       { expiresIn: "12h" }
     );
 
-    // Poner cookie httpOnly (no enviar token en el body)
     res.cookie("token", token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-      maxAge: 12 * 60 * 60 * 1000, // 12 horas
+      maxAge: 12 * 60 * 60 * 1000,
     });
 
-    // Devolver sólo datos públicos actualizados desde BD (sin token)
+    // === ALERTAS DE LOGIN ===
+    // Verificar configuración del usuario para alertas (user_settings)
+    try {
+      const [settingRows] = await pool.query(
+        "SELECT payload FROM user_settings WHERE user_id = ? AND section_key = 'seguridad'",
+        [user.id_usuario]
+      );
+      // Por defecto true si no existe config
+      const loginAlertsEnabled =
+        settingRows.length > 0
+          ? settingRows[0].payload.login_alerts ?? true
+          : true;
+
+      if (loginAlertsEnabled) {
+        // Enviar alerta asíncronamente (no esperar)
+        sendLoginAlert(user, req);
+      }
+    } catch (e) {
+      console.error("Error verificando settings para alerta:", e);
+    }
+
     return res.json({
       message: "Inicio de sesión exitoso",
       rol: user.rol,
