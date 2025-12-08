@@ -4,7 +4,7 @@ import {
   getSection,
   patchSection,
   getSectionHistory,
-} from "../../controllers/Autolog/settings/settings.controller.js";
+} from "../../controllers/AutoLog/settings/settings.controller.js";
 import {
   authenticate,
   authorizeByPermisos,
