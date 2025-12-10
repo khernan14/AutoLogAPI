@@ -12,74 +12,67 @@ export const getUsers = async (req, res) => {
   }
 };
 
-// Asignar permisos a un usuario
 export const asignarPermisos = async (req, res) => {
   const { id_usuario, permisos } = req.body ?? {};
 
-  if (!id_usuario || Number.isNaN(Number(id_usuario))) {
-    return res
-      .status(400)
-      .json({ error: "id_usuario es requerido y debe ser numérico." });
-  }
+  console.log("👉 Payload recibido:", {
+    id_usuario,
+    cantidadPermisos: permisos?.length,
+  });
 
-  if (!Array.isArray(permisos)) {
-    return res
-      .status(400)
-      .json({ error: "La lista de permisos debe ser un arreglo." });
+  if (!id_usuario) {
+    return res.status(400).json({ error: "Falta id_usuario" });
   }
 
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
 
-    // 1) Eliminar permisos existentes del usuario
     await conn.query("DELETE FROM usuario_permisos WHERE id_usuario = ?", [
       id_usuario,
     ]);
 
-    // 2) Si no hay permisos nuevos, sólo commit y seguir
-    if (permisos.length > 0) {
-      // Obtener los IDs de todos los permisos enviados (evita inserción de nombres no existentes)
-      const [rows] = await conn.query(
-        `SELECT id, nombre FROM permisos WHERE nombre IN (?)`,
+    if (Array.isArray(permisos) && permisos.length > 0) {
+      const [permisosEncontrados] = await conn.query(
+        `SELECT id FROM permisos WHERE nombre IN (?)`,
         [permisos]
       );
 
-      // Armar valores para inserción masiva: [ [id_usuario, permiso_id], ... ]
-      const valores = rows.map((permiso) => [id_usuario, permiso.id]);
+      console.log(
+        `🔎 Permisos encontrados en DB: ${permisosEncontrados.length} de ${permisos.length} solicitados`
+      );
 
-      if (valores.length > 0) {
+      if (permisosEncontrados.length > 0) {
+        const valoresInsert = permisosEncontrados.map((p) => [
+          id_usuario,
+          p.id,
+        ]);
+
         await conn.query(
           "INSERT INTO usuario_permisos (id_usuario, permiso_id) VALUES ?",
-          [valores]
+          [valoresInsert]
         );
       }
-      // Si algunos permisos enviados no existen en tabla 'permisos', quedan ignorados.
     }
 
-    // 3) Incrementar token_version del usuario para invalidar tokens antiguos
     await conn.query(
       "UPDATE usuarios SET token_version = token_version + 1 WHERE id_usuario = ?",
       [id_usuario]
     );
 
-    // 4) Obtener token_version actualizado para devolverlo en la respuesta
-    const [uRows] = await conn.query(
-      "SELECT token_version FROM usuarios WHERE id_usuario = ?",
-      [id_usuario]
-    );
-    const tokenVersion = uRows?.[0]?.token_version ?? null;
-
     await conn.commit();
-
-    return res.json({
-      mensaje: "Permisos actualizados correctamente.",
-      tokenVersion,
-    });
+    return res.json({ mensaje: "Permisos actualizados correctamente." });
   } catch (error) {
     await conn.rollback();
-    console.error("Error al actualizar permisos:", error);
-    return res.status(500).json({ error: "Error al actualizar permisos." });
+
+    console.error("🔴 ERROR CRÍTICO SQL:", error);
+    console.error("Mensaje SQL:", error.sqlMessage);
+
+    return res.status(500).json({
+      error: "Falló el guardado",
+      detalle: error.message,
+      sql: error.sqlMessage,
+    });
   } finally {
     conn.release();
   }
