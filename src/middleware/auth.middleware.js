@@ -25,15 +25,17 @@ const getTokenFromRequest = (req) => {
   return null;
 };
 
-export const authenticate = (req, res, next) => {
+export const authenticate = async (req, res, next) => {
   try {
     const token = getTokenFromRequest(req);
+
     if (!token) {
       return res
         .status(401)
         .json({ error: "Acceso denegado. Token no proporcionado." });
     }
 
+    // --- PASO A: Verificación Matemática (JWT) ---
     let decoded;
     try {
       decoded = jwt.verify(token, process.env.JWT_SECRET);
@@ -49,8 +51,44 @@ export const authenticate = (req, res, next) => {
       return res.status(401).json({ error: "Token inválido" });
     }
 
-    // === AQUÍ: ya NO comprobamos token_version en la BD ===
-    // Adjuntamos el payload firmado al req.user para uso posterior.
+    // --- PASO B: Verificación de Sesión Activa (DB) ---
+    // Esto es lo que permite el "Cerrar sesión en otros dispositivos"
+    try {
+      // Extraemos la firma (última parte del token)
+      const tokenSignature = token.split(".")[2];
+
+      // Buscamos si esta firma existe en la tabla de sesiones activas
+      const [rows] = await pool.execute(
+        "SELECT id FROM user_sessions WHERE token_signature = ?",
+        [tokenSignature]
+      );
+
+      // Si no hay resultados, significa que la sesión fue borrada/revocada
+      if (rows.length === 0) {
+        // Opcional: Limpiamos la cookie para que no siga enviando el token revocado
+        res.clearCookie("token", {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+        });
+
+        logger.warn(
+          `Intento de uso de token revocado para usuario ${decoded.id}`
+        );
+        return res
+          .status(401)
+          .json({ error: "Sesión revocada o cerrada remotamente" });
+      }
+    } catch (dbError) {
+      // Si falla la DB, por seguridad es mejor denegar o loguear el error crítico
+      logger.error(
+        { dbError },
+        "Error verificando user_sessions en authenticate"
+      );
+      return res.status(500).json({ error: "Error interno de validación" });
+    }
+
+    // --- PASO C: Construcción del Usuario ---
     req.user = {
       id: decoded.id,
       rol: decoded.rol,
@@ -62,7 +100,7 @@ export const authenticate = (req, res, next) => {
     return next();
   } catch (err) {
     logger.error({ err }, "authenticate error");
-    return res.status(401).json({ error: "Token inválido" });
+    return res.status(401).json({ error: "Error de autenticación" });
   }
 };
 

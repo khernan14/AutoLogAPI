@@ -19,6 +19,9 @@ import {
   getEmailSupervisor,
   me,
   logout,
+  getActiveSessions,
+  getActivityLogs,
+  revokeOtherSessions,
 } from "../../controllers/AutoLog/Auth/auth.controller.js";
 import {
   authenticate,
@@ -52,6 +55,10 @@ router.get(
   authorizeByPermisos("ver_usuarios"),
   getUsers
 );
+
+// Rutas de Seguridad
+router.get("/sessions", authenticate, getActiveSessions);
+router.get("/activity-logs", authenticate, getActivityLogs);
 
 router.get(
   "/usuarios/:id",
@@ -100,6 +107,8 @@ router.post(
   authorizeByPermisos("crear_usuario"),
   register
 );
+
+router.post("/sessions/revoke", authenticate, revokeOtherSessions);
 
 /**
  * @swagger

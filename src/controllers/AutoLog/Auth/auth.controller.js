@@ -190,21 +190,42 @@ export const login = async (req, res) => {
       maxAge: 12 * 60 * 60 * 1000,
     });
 
-    // === ALERTAS DE LOGIN ===
-    // Verificar configuración del usuario para alertas (user_settings)
+    try {
+      const ip =
+        req.headers["x-forwarded-for"] || req.socket.remoteAddress || "0.0.0.0";
+      const userAgent = req.headers["user-agent"] || "Dispositivo Desconocido";
+
+      let deviceName = "Escritorio";
+      if (/mobile/i.test(userAgent)) deviceName = "Móvil";
+      else if (/windows/i.test(userAgent)) deviceName = "Windows PC";
+      else if (/mac/i.test(userAgent)) deviceName = "Mac";
+
+      const tokenSignature = token.split(".")[2];
+      await pool.execute(
+        `INSERT INTO user_sessions (user_id, token_signature, ip_address, device_info) 
+         VALUES (?, ?, ?, ?)`,
+        [user.id_usuario, tokenSignature, ip, userAgent]
+      );
+      await pool.execute(
+        `INSERT INTO activity_logs (user_id, action, ip_address, device_info) 
+         VALUES (?, ?, ?, ?)`,
+        [user.id_usuario, "Inicio de sesión exitoso", ip, userAgent]
+      );
+    } catch (dbError) {
+      console.error("Error guardando sesión/log:", dbError);
+    }
+
     try {
       const [settingRows] = await pool.query(
         "SELECT payload FROM user_settings WHERE user_id = ? AND section_key = 'seguridad'",
         [user.id_usuario]
       );
-      // Por defecto true si no existe config
       const loginAlertsEnabled =
         settingRows.length > 0
           ? settingRows[0].payload.login_alerts ?? true
           : true;
 
       if (loginAlertsEnabled) {
-        // Enviar alerta asíncronamente (no esperar)
         sendLoginAlert(user, req);
       }
     } catch (e) {
@@ -341,6 +362,16 @@ export const updateUser = async (req, res) => {
       ]
     );
 
+    const ip =
+      req.headers["x-forwarded-for"] || req.socket.remoteAddress || "0.0.0.0";
+    const userAgent = req.headers["user-agent"] || "Navegador Web";
+
+    await pool.execute(
+      `INSERT INTO activity_logs (user_id, action, ip_address, device_info) 
+         VALUES (?, ?, ?, ?)`,
+      [id, "Restablecimiento de Contraseña", ip, userAgent]
+    );
+
     return res.json({ message: "Usuario actualizado correctamente" });
   } catch (error) {
     console.error("updateUser error:", error);
@@ -356,11 +387,13 @@ export const updateOwnProfile = async (req, res) => {
   const { nombre, email, username, password } = req.body ?? {};
 
   try {
+    // 1. Hashear contraseña si existe
     const hashedPassword =
       password && String(password).length
         ? await bcrypt.hash(String(password), 10)
         : null;
 
+    // 2. Ejecutar el SP de actualización (TU CÓDIGO ACTUAL)
     await pool.execute(
       "CALL gestion_usuarios('Actualizar', ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL)",
       [
@@ -371,6 +404,21 @@ export const updateOwnProfile = async (req, res) => {
         hashedPassword,
       ]
     );
+
+    // === NUEVO: LOG DE CAMBIO DE CONTRASEÑA ===
+    // Solo guardamos el log si efectivamente envió una nueva contraseña
+    if (hashedPassword) {
+      const ip =
+        req.headers["x-forwarded-for"] || req.socket.remoteAddress || "0.0.0.0";
+      const userAgent = req.headers["user-agent"] || "Dispositivo Desconocido";
+
+      await pool.execute(
+        `INSERT INTO activity_logs (user_id, action, ip_address, device_info) 
+             VALUES (?, ?, ?, ?)`,
+        [userId, "Restablecimiento de contraseña", ip, userAgent]
+      );
+    }
+    // ==========================================
 
     return res.json({ message: "Perfil actualizado correctamente" });
   } catch (error) {
@@ -445,6 +493,16 @@ export const resetPassword = async (req, res) => {
       [resetTokenEntry.id]
     );
 
+    const ip =
+      req.headers["x-forwarded-for"] || req.socket.remoteAddress || "0.0.0.0";
+    const userAgent = req.headers["user-agent"] || "Navegador Web";
+
+    await pool.execute(
+      `INSERT INTO activity_logs (user_id, action, ip_address, device_info) 
+         VALUES (?, ?, ?, ?)`,
+      [resetTokenEntry.user_id, "Restablecimiento de contraseña", ip, userAgent]
+    );
+
     return res
       .status(200)
       .json({ message: "Contraseña restablecida exitosamente." });
@@ -453,5 +511,84 @@ export const resetPassword = async (req, res) => {
     return res.status(500).json({
       message: "Error interno del servidor al restablecer la contraseña.",
     });
+  }
+};
+
+// --- NUEVAS FUNCIONES PARA SEGURIDAD ---
+
+// Obtener sesiones activas
+export const getActiveSessions = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    // El token actual viene en la cookie
+    const currentToken = req.cookies.token;
+    // Usamos la firma (última parte del JWT) para identificar la sesión actual
+    const currentSignature = currentToken ? currentToken.split(".")[2] : "";
+
+    const [rows] = await pool.execute(
+      "SELECT * FROM user_sessions WHERE user_id = ? ORDER BY last_active DESC LIMIT 3;",
+      [userId]
+    );
+
+    // Formateamos para el frontend
+    const sessions = rows.map((s) => ({
+      id: s.id,
+      device: s.device_info || "Desconocido",
+      ip: s.ip_address,
+      last_active: s.last_active,
+      // Si la firma en la DB coincide con la de la cookie, es la sesión actual
+      current: s.token_signature === currentSignature,
+      type: (s.device_info || "").toLowerCase().includes("mobile")
+        ? "mobile"
+        : "desktop",
+    }));
+
+    return res.json(sessions);
+  } catch (error) {
+    console.error("getActiveSessions error:", error);
+    return sendError(res, 500, "Error al obtener sesiones");
+  }
+};
+
+// Obtener historial de actividad
+export const getActivityLogs = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const [rows] = await pool.execute(
+      "SELECT * FROM activity_logs WHERE user_id = ? ORDER BY created_at DESC LIMIT 6",
+      [userId]
+    );
+    return res.json(rows);
+  } catch (error) {
+    console.error("getActivityLogs error:", error);
+    return sendError(res, 500, "Error al obtener logs");
+  }
+};
+
+// Revocar todas las sesiones MENOS la actual
+export const revokeOtherSessions = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const currentToken = req.cookies.token;
+    const currentSignature = currentToken ? currentToken.split(".")[2] : "";
+
+    // Borramos todas las que NO tengan la firma actual
+    await pool.execute(
+      "DELETE FROM user_sessions WHERE user_id = ? AND token_signature != ?",
+      [userId, currentSignature]
+    );
+
+    // Opcional: Registrar esto en el log
+    const ip = req.headers["x-forwarded-for"] || req.socket.remoteAddress;
+    const userAgent = req.headers["user-agent"] || "Unknown";
+    await pool.execute(
+      "INSERT INTO activity_logs (user_id, action, ip_address, device_info) VALUES (?, ?, ?, ?)",
+      [userId, "Cierre de otras sesiones", ip, userAgent]
+    );
+
+    return res.json({ message: "Otras sesiones cerradas correctamente" });
+  } catch (error) {
+    console.error("revokeSessions error:", error);
+    return sendError(res, 500, "Error al cerrar sesiones");
   }
 };
