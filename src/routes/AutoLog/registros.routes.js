@@ -10,6 +10,7 @@ import {
   asociarImagenes,
   obtenerRegistroConImagenes,
   obtenerRegistroPendienteEmpleado,
+  obtenerRegistroPendientePorVehiculo,
   obtenerKmActual,
   obtenerCombustibleActual,
   getCiudades,
@@ -61,6 +62,11 @@ router.get(
 router.get(
   "/empleados/:id_empleado/registro-pendiente",
   obtenerRegistroPendienteEmpleado
+);
+
+router.get(
+  "/vehiculos/:id_vehiculo/registro-pendiente",
+  obtenerRegistroPendientePorVehiculo
 );
 
 /**

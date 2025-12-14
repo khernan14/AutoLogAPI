@@ -46,6 +46,54 @@ export const obtenerRegistroPendienteEmpleado = async (req, res) => {
   }
 };
 
+// 📌 Obtener registro pendiente POR VEHÍCULO (nuevo)
+export const obtenerRegistroPendientePorVehiculo = async (req, res) => {
+  const idVehiculo = toInt(req.params.id_vehiculo);
+  if (Number.isNaN(idVehiculo))
+    return res.status(400).json({ message: "id_vehiculo inválido" });
+
+  try {
+    const [resultado] = await pool.execute(
+      `SELECT 
+         r.id AS id_registro,
+         r.id_vehiculo,
+         v.placa,
+         r.fecha_salida,
+         u.nombre AS nombre_empleado,
+         u.email AS email_empleado
+       FROM registros r
+       JOIN vehiculos v ON r.id_vehiculo = v.id
+       JOIN empleados e ON r.id_empleado = e.id
+       JOIN usuarios u ON e.id_usuario = u.id_usuario
+       WHERE r.id_vehiculo = ? AND r.fecha_regreso IS NULL
+       LIMIT 1`,
+      [idVehiculo]
+    );
+
+    if (resultado.length === 0) {
+      return res
+        .status(404)
+        .json({ message: "No hay registro pendiente para este vehículo." });
+    }
+
+    // Devolver objeto con fecha_salida (ISO) y datos del empleado
+    const row = resultado[0];
+    return res.json({
+      id_registro: row.id_registro,
+      id_vehiculo: row.id_vehiculo,
+      placa: row.placa,
+      fecha_salida: row.fecha_salida
+        ? new Date(row.fecha_salida).toISOString()
+        : null,
+      nombre_empleado: row.nombre_empleado || null,
+      email_empleado: row.email_empleado || null,
+    });
+  } catch (err) {
+    logger.error({ err }, "obtenerRegistroPendientePorVehiculo failed");
+    return res.status(500).json({ error: "Error interno del servidor." });
+  }
+};
+
 export const obtenerKmActual = async (req, res) => {
   const idVehiculo = toInt(req.params.id_vehiculo);
   if (Number.isNaN(idVehiculo))
