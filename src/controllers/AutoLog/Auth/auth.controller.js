@@ -187,6 +187,7 @@ export const login = async (req, res) => {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+      partitioned: process.env.NODE_ENV === "production",
       maxAge: 12 * 60 * 60 * 1000,
     });
 
